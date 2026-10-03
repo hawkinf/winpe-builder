@@ -1,0 +1,13 @@
+# Binários e artefatos pesados (não versionar)
+output/*
+!output/.gitkeep
+build/*
+!build/.gitkeep
+tools/*
+!tools/.gitkeep
+!tools/README.md
+*.iso
+*.wim
+*.esd
+*.exe
+*.dll
