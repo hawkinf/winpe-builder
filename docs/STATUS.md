@@ -52,7 +52,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
 - 2026-11-11 — Claude Code — correção de docs: barras invertidas perdidas em linhas do STATUS (passo 5 e A1/A2–A4).
-- 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ Arquivos\Programas\&lt;id&gt; e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
+- 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ Arquivos\Programas\{id} e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
 - 2026-11-11 — Claude Code — ícone do app (scripts/make-icon.ps1 gera app.ico 16..256), ApplicationIcon + metadados de versão no csproj, Icon nas janelas. Validar: dotnet build; Propriedades > Detalhes do WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 7: GUI completa (MainWindow/UsbWindow), UserSettings, LogFile, fechamento seguro durante operação (cancela e desmonta antes de sair), README. Validar: dotnet test src/WinPEBuilder.sln (52 ok) e abrir WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 6: BootFiles (etfsboot/efisys, prefere noprompt), etapa oscdimg (-m -o -u2 -udfver102 -bootdata BIOS+UEFI), fwfiles preenchido, UsbMediaWriter. Validar: dotnet test src/WinPEBuilder.sln (48 ok); oscdimg real rodado sobre a mídia do ADK e El Torito conferido.
