@@ -12,7 +12,8 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 ## Estado atual
 | Módulo / área | Estado | Observações |
 |---|---|---|
-| (preencha) | 🔄 | |
+| Base WinPE Test Lab (PhoenixPE + scripts UIA em `scripts/`) | ✅ | pré-existente; coexiste com o app novo |
+| WinPEBuilder (GUI C#) | ⏳ | planejado — ver Pendências |
 
 Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com problema.
 
@@ -20,10 +21,11 @@ Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com prob
 dotnet build src/WinPEBuilder.sln ; dotnet test
 
 ## Decisões de arquitetura (não reverter sem motivo)
-- (data) decisão — por quê.
+- 2026-11-11 — app em C# (SDK .NET 10 instalado), código em `src/`. Fonte dos arquivos WinPE: Windows ADK + WinPE add-on (copype/oscdimg/DISM). O ADK local só tem amd64; x86 exige outra fonte (a decidir).
 
 ## Pendências / riscos conhecidos
-- (preencha) — responsável: dono do projeto | qualquer IA
+- Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
+- Implementar o WinPEBuilder em micro-passos (solução, detecção/instalação do ADK, injeção de arquivos, geração da ISO, GUI) — qualquer IA
 
 ## Como continuar (qualquer IA)
 1. Leia `AGENTS.md`, este arquivo e `docs/ARCHITECTURE.md`.
@@ -32,4 +34,4 @@ dotnet build src/WinPEBuilder.sln ; dotnet test
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
-- 2026-11-11 — projeto criado com o padrão de handoff (Claude Code).
+- 2026-11-11 — Claude Code — padrão de handoff instalado e STATUS preenchido (plano do WinPEBuilder definido). Validar: `pwsh scripts/check-handoff.ps1`.
