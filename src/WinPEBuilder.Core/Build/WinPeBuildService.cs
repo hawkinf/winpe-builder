@@ -146,6 +146,7 @@ public sealed class WinPeBuildService(
             steps.Add(new("Copiando os arquivos para a mídia da ISO", () => CopyFilesAsync(run, Path.Combine(run.Layout.Media, StartnetScript.FilesFolderName))));
         }
 
+        steps.Add(new("Gerando a ISO (oscdimg)", () => CreateIsoAsync(run)));
         return steps;
     }
 
@@ -302,6 +303,48 @@ public sealed class WinPeBuildService(
     {
         await DismAsync(run, $"/Unmount-Image /MountDir:{CommandSpec.Quote(run.Layout.Mount)} /Commit").ConfigureAwait(false);
         run.Mounted = false;
+    }
+
+    private async Task CreateIsoAsync(BuildRun run)
+    {
+        var boot = BootFiles.Resolve(run.Kit, run.Options, run.Layout);
+        run.Log($"Boot BIOS: {boot.EtfsBoot}");
+        run.Log($"Boot UEFI: {boot.EfiSys}");
+
+        // Deixa o layout completo (fwfiles) também no modo ISO, para o MakeWinPEMedia/pendrive.
+        Directory.CreateDirectory(run.Layout.FwFiles);
+        foreach (var file in boot.AllFiles)
+        {
+            var target = Path.Combine(run.Layout.FwFiles, Path.GetFileName(file));
+            if (!string.Equals(Path.GetFullPath(file), Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
+            {
+                File.Copy(file, target, overwrite: true);
+            }
+        }
+
+        var output = Path.GetFullPath(run.Options.OutputIsoPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        if (File.Exists(output))
+        {
+            try
+            {
+                File.Delete(output);
+            }
+            catch (IOException ex)
+            {
+                throw new BuildException($"Não foi possível substituir a ISO existente (está em uso?): {ex.Message}");
+            }
+        }
+
+        var command = new CommandSpec(run.Kit.OscdimgExe, BootFiles.BuildOscdimgArguments(boot, run.Layout.Media, output, run.Options.VolumeLabel));
+        await ExecuteAsync(run, command, "oscdimg").ConfigureAwait(false);
+
+        if (!File.Exists(output) || new FileInfo(output).Length == 0)
+        {
+            throw new BuildException("O oscdimg terminou sem gerar a ISO. Veja o log.");
+        }
+
+        run.Log($"ISO gerada: {output} ({new FileInfo(output).Length / (1024 * 1024)} MB)");
     }
 
     private static async Task WriteStartnetAsync(BuildRun run)

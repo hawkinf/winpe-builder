@@ -54,6 +54,10 @@ public sealed class BuildServiceTests : IDisposable
         Touch(kit.OscdimgExe);
         Touch(kit.CopypeCmd);
         Touch(kit.WinPeWim(arch));
+        var oscdimgDir = Path.Combine(kit.DeploymentToolsRoot, arch.ToAdkName(), "Oscdimg");
+        Touch(Path.Combine(oscdimgDir, "etfsboot.com"));
+        Touch(Path.Combine(oscdimgDir, "efisys.bin"));
+        Touch(Path.Combine(oscdimgDir, "efisys_noprompt.bin"));
         Directory.CreateDirectory(kit.OptionalComponentsDirectory(arch));
         foreach (var c in components)
         {
@@ -73,8 +77,13 @@ public sealed class BuildServiceTests : IDisposable
     };
 
     /// <summary>Simula o copype criando o mesmo layout que ele cria.</summary>
-    private static (int, string[]) FakeCopype(CommandSpec c, string workDir)
+    private (int, string[]) FakeCopype(CommandSpec c, string workDir)
     {
+        if (c.FileName.EndsWith("oscdimg.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            Touch(Path.Combine(_temp, "out", "x.iso"));
+        }
+
         if (c.FileName.Equals("cmd.exe", StringComparison.OrdinalIgnoreCase) && c.Arguments.Contains("copype.cmd"))
         {
             Touch(Path.Combine(workDir, "media", "sources", "boot.wim"));
@@ -144,7 +153,9 @@ public sealed class BuildServiceTests : IDisposable
 
         Assert.Contains(args, a => a.Contains("/Set-InputLocale:pt-BR"));
         Assert.Contains(args, a => a.Contains("/Set-ScratchSpace:512"));
-        Assert.EndsWith("/Commit", args[^1]);
+        Assert.EndsWith("/Commit", args[^2]);
+        Assert.Contains("-bootdata:2#p0,e,b", args[^1]); // última etapa: oscdimg
+        Assert.EndsWith("oscdimg.exe", runner.Commands[^1].FileName);
         Assert.DoesNotContain(args, a => a.Contains("/Discard"));
         Assert.All(runner.Commands.Where(c => c.FileName == kit.DismExe), c => Assert.Equal(kit.WinPeRoot, c.Environment!["WinPERoot"]));
     }
@@ -262,6 +273,11 @@ public sealed class BuildServiceTests : IDisposable
             if (c.Arguments.StartsWith("/Export-Image"))
             {
                 Touch(Path.Combine(options.WorkDirectory, "media", "sources", "boot.wim"));
+            }
+
+            if (c.FileName.EndsWith("oscdimg.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                Touch(options.OutputIsoPath);
             }
 
             return (0, []);

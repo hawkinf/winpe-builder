@@ -31,12 +31,20 @@ public sealed class FilesInjectionTests : IDisposable
         Touch(kit.OscdimgExe);
         Touch(kit.CopypeCmd);
         Touch(kit.WinPeWim(WinPeArchitecture.X64));
+        var oscdimgDir = Path.Combine(kit.DeploymentToolsRoot, "amd64", "Oscdimg");
+        Touch(Path.Combine(oscdimgDir, "etfsboot.com"));
+        Touch(Path.Combine(oscdimgDir, "efisys_noprompt.bin"));
         Directory.CreateDirectory(kit.OptionalComponentsDirectory(WinPeArchitecture.X64));
         return new AdkLocator([kit.KitsRoot]);
     }
 
     private ScriptedRunner Runner() => new(c =>
     {
+        if (c.FileName.EndsWith("oscdimg.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            Touch(Path.Combine(_temp, "o.iso"));
+        }
+
         if (c.Arguments.Contains("copype.cmd"))
         {
             Touch(Path.Combine(Work, "media", "sources", "boot.wim"));
