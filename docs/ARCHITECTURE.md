@@ -27,3 +27,6 @@ scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, outp
 - (coisas que já custaram tempo a alguém)
 - DandISetEnv.bat lê o registro (KitsRoot10) e roda WimMountAdkSetup; por isso NÃO o usamos: AdkInstall.BuildEnvironment() monta WinPERoot/OSCDImgRoot/DISMRoot/PATH e funciona também para ADK em pasta privada.
 - O ADK atual (24H2/26100) não tem WinPE x86; só o ADK Windows 10 2004 (linkid 2120254 + add-on 2120253) tem.
+- Core/Processes: CommandSpec (inclui Cmd() p/ .cmd com aspas corretas e Quote()) + ProcessRunner (saída na codepage OEM, stdin fechado p/ nunca travar em "Y/N"). Core/AppPaths: tudo em %LOCALAPPDATA%\WinPEBuilder (downloads, adk\<id>, work\<arch>).
+- AdkInstaller só aceita instaladores com assinatura Microsoft válida; exit code 3010 = sucesso (reboot).
+- App usa manifest requireAdministrator (DISM exige); `dotnet run` abre pedido de UAC.
