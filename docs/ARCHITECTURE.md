@@ -7,7 +7,11 @@ no mesmo commit.
 Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), injeta arquivos do usuário e gera a ISO.
 
 ## Estrutura de pastas
-src/ (app C#), scripts/ (PowerShell/UIA PEBakery), config/, tools/, build/, output/
+src/WinPEBuilder.sln
+  WinPEBuilder.Core/   – lógica sem UI (net10.0): arquitetura, detecção/instalação do ADK, montagem do WinPE, ISO
+  WinPEBuilder.App/    – GUI WPF (net10.0-windows); só apresentação, chama o Core
+  WinPEBuilder.Tests/  – testes xUnit do Core
+scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, output/ (binários ignorados pelo git)
 
 ## Fluxos principais
 - (descreva em 3–6 linhas cada: entrada → processamento → saída)

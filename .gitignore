@@ -11,3 +11,9 @@ tools/*
 *.esd
 *.exe
 *.dll
+
+# .NET
+bin/
+obj/
+.vs/
+*.user

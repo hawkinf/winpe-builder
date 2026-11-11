@@ -13,19 +13,21 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 | Módulo / área | Estado | Observações |
 |---|---|---|
 | Base WinPE Test Lab (PhoenixPE + scripts UIA em `scripts/`) | ✅ | pré-existente; coexiste com o app novo |
-| WinPEBuilder (GUI C#) | ⏳ | planejado — ver Pendências |
+| WinPEBuilder: solução (Core/App/Tests) | ✅ | passo 1; build 0 avisos, 3 testes ok |
+| WinPEBuilder: ADK, montagem, injeção, ISO, GUI | ⏳ | passos 2–7 |
 
 Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com problema.
 
 ## Como rodar / validar
-dotnet build src/WinPEBuilder.sln ; dotnet test
+dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 
 ## Decisões de arquitetura (não reverter sem motivo)
 - 2026-11-11 — app em C# (SDK .NET 10 instalado), código em `src/`. Fonte dos arquivos WinPE: Windows ADK + WinPE add-on (copype/oscdimg/DISM). O ADK local só tem amd64; x86 exige outra fonte (a decidir).
+- 2026-11-11 — usuário escolheu opção C para x86: ADK antigo como padrão + boot.wim de ISO Windows 32-bit como alternativa.
 
 ## Pendências / riscos conhecidos
 - Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
-- Implementar o WinPEBuilder em micro-passos (solução, detecção/instalação do ADK, injeção de arquivos, geração da ISO, GUI) — qualquer IA
+- Passos 2–7: detecção/instalação do ADK (x64 e x86 via ADK antigo + alternativa boot.wim), montagem do WinPE, injeção de arquivos, ISO (oscdimg), GUI — qualquer IA
 
 ## Como continuar (qualquer IA)
 1. Leia `AGENTS.md`, este arquivo e `docs/ARCHITECTURE.md`.
@@ -34,4 +36,5 @@ dotnet build src/WinPEBuilder.sln ; dotnet test
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-11 — Claude Code — passo 1: solução src/WinPEBuilder.sln (Core/App/Tests, TreatWarningsAsErrors). Validar: `dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln`.
 - 2026-11-11 — Claude Code — padrão de handoff instalado e STATUS preenchido (plano do WinPEBuilder definido). Validar: `pwsh scripts/check-handoff.ps1`.
