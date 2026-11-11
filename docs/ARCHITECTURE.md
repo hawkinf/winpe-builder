@@ -8,7 +8,7 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 
 ## Estrutura de pastas
 src/WinPEBuilder.sln
-  WinPEBuilder.Core/   – lógica sem UI (net10.0): arquitetura, detecção/instalação do ADK, montagem do WinPE, ISO
+  WinPEBuilder.Core/   – lógica sem UI (net10.0-windows). Adk/: AdkInstall (caminhos/variáveis de ambiente do ADK), AdkLocator (acha ADK em registro/Program Files/pastas privadas)
   WinPEBuilder.App/    – GUI WPF (net10.0-windows); só apresentação, chama o Core
   WinPEBuilder.Tests/  – testes xUnit do Core
 scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, output/ (binários ignorados pelo git)
@@ -25,3 +25,5 @@ scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, outp
 
 ## Armadilhas conhecidas
 - (coisas que já custaram tempo a alguém)
+- DandISetEnv.bat lê o registro (KitsRoot10) e roda WimMountAdkSetup; por isso NÃO o usamos: AdkInstall.BuildEnvironment() monta WinPERoot/OSCDImgRoot/DISMRoot/PATH e funciona também para ADK em pasta privada.
+- O ADK atual (24H2/26100) não tem WinPE x86; só o ADK Windows 10 2004 (linkid 2120254 + add-on 2120253) tem.

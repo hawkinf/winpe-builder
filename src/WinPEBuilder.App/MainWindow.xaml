@@ -1,12 +1,23 @@
 ﻿<Window x:Class="WinPEBuilder.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:WinPEBuilder.App"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="WinPE Builder" Height="520" Width="820" MinHeight="420" MinWidth="680"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
+        <GroupBox Header="1. Requisitos (Windows ADK)" Padding="10">
+            <StackPanel>
+                <TextBlock x:Name="DeploymentToolsText" Margin="0,2"/>
+                <TextBlock x:Name="WinPeX64Text" Margin="0,2"/>
+                <TextBlock x:Name="WinPeX86Text" Margin="0,2"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button x:Name="RefreshButton" Content="Verificar novamente" Padding="12,4" Click="RefreshButton_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
     </Grid>
 </Window>
