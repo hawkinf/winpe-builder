@@ -17,7 +17,8 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 | WinPEBuilder: detecção do ADK (`Core/Adk`) | ✅ | passo 2; 8 testes ok; painel de status na GUI |
 | WinPEBuilder: instalação do ADK (`AdkInstaller`, botões + progresso na GUI) | ✅ | passo 3; 17 testes ok; download+instalação real NÃO testados (mexe no sistema) |
 | WinPEBuilder: montagem do WinPE (`Core/Build`: copype ou boot.wim de ISO, pacotes, teclado, unmount) | ✅ | passo 4; 28 testes ok com runner simulado; execução real com DISM exige admin e NÃO foi feita |
-| WinPEBuilder: injeção de arquivos, ISO, GUI completa | ⏳ | passos 5–7 |
+| WinPEBuilder: injeção de arquivos (`StartnetScript`, modos OnIso/InsideImage) | ✅ | passo 5; 35 testes ok; lógica do startnet.cmd executada de verdade com subst; boot real no WinPE NÃO testado |
+| WinPEBuilder: ISO (oscdimg), GUI completa | ⏳ | passos 6–7 |
 
 Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com problema.
 
@@ -30,7 +31,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 
 ## Pendências / riscos conhecidos
 - Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
-- Passos 5–7: injeção de arquivos, ISO (oscdimg), GUI completa — qualquer IA
+- Passos 6–7: ISO (oscdimg) e GUI completa — qualquer IA
 - Validar uma geração REAL (x64 via ADK) com o app elevado; só foi testado com runner simulado — responsável: dono do projeto
 - Instalação real do ADK (x64 e x86 em pasta privada via /installpath) ainda não foi exercitada; o instalador pode recusar o ADK 2004 se houver ADK mais novo — fallback: boot.wim de ISO 32 bits (passo 4)
 
@@ -41,6 +42,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-11 — Claude Code — passo 5: StartnetScript (mapeia a pasta como Z: e %ARQUIVOS%, roda startup.cmd), cópia p/ mediaArquivos (OnIso) ou mountArquivos (InsideImage, máx 1 GB), travas de pasta sobreposta. Validar: dotnet test src/WinPEBuilder.sln (35 ok).
 - 2026-11-11 — Claude Code — passo 4: Core/Build (BuildOptions, OptionalComponents, WinPeBuildService: copype/ISO→boot.wim, mount, pacotes, locale, scratch, unmount commit/discard). Validar: dotnet test src/WinPEBuilder.sln (28 ok).
 - 2026-11-11 — Claude Code — passo 3: Processes/ (CommandSpec, ProcessRunner), AdkRelease/AdkCatalog, AdkInstaller (download + verificação Authenticode Microsoft + instalação silenciosa), AppPaths, manifesto requireAdministrator, GUI com botões/progresso/log. Validar: dotnet test src/WinPEBuilder.sln (17 ok).
 - 2026-11-11 — Claude Code — passo 2: AdkInstall/AdkLocator (Core/Adk), painel de status na GUI; Core/Tests agora net10.0-windows. Validar: dotnet test src/WinPEBuilder.sln (8 ok).

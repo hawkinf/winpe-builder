@@ -34,3 +34,4 @@ scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, outp
 - Segurança: a pasta de trabalho só é apagada se estiver DENTRO de allowedWorkRoot (AppPaths.Root); caso contrário BuildException.
 - Pacotes opcionais: OptionalComponents.All tem ordem = ordem de instalação; Resolve() inclui dependências.
 - Armadilha: arquivos copiados de ISO são somente leitura — FileSystemHelper limpa o atributo (senão Directory.Delete falha).
+- Arquivos do usuário: OnIso (padrão recomendado) copia p/ `media\Arquivos` e o startnet.cmd procura em C..Z o `Arquivos\.winpe-files` e faz `subst Z:`; InsideImage copia p/ `X:\Arquivos` (RAM, limite 1 GB). Letra Z (não P): em PCs reais P/outras já são comuns; subst falho é silenciado e %ARQUIVOS% sempre vale. `startup.cmd` na pasta roda automaticamente.

@@ -52,8 +52,9 @@ public sealed class WinPeBuildService(
             throw new BuildException($"A pasta de trabalho precisa ficar dentro de {allowedWorkRoot}.");
         }
 
+        CheckFilesFolder(options);
         var kit = ResolveKit(options);
-        var run = new BuildRun(options, kit, new BuildLayout(Path.GetFullPath(options.WorkDirectory)), log, cancellationToken);
+        var run =new BuildRun(options, kit, new BuildLayout(Path.GetFullPath(options.WorkDirectory)), log, cancellationToken);
         var steps = PlanSteps(run);
 
         try
@@ -128,7 +129,23 @@ public sealed class WinPeBuildService(
 
         steps.Add(new("Aplicando ajustes (teclado, espaço temporário)", () => ConfigureAsync(run)));
 
+        if (o.FilesMode != FilesMode.None)
+        {
+            steps.Add(new("Criando o script de inicialização (startnet.cmd)", () => WriteStartnetAsync(run)));
+        }
+
+        if (o.FilesMode == FilesMode.InsideImage)
+        {
+            steps.Add(new("Copiando os arquivos para dentro da imagem", () => CopyFilesAsync(run, Path.Combine(run.Layout.Mount, StartnetScript.FilesFolderName))));
+        }
+
         steps.Add(new("Desmontando e salvando o boot.wim", () => UnmountAsync(run)));
+
+        if (o.FilesMode == FilesMode.OnIso)
+        {
+            steps.Add(new("Copiando os arquivos para a mídia da ISO", () => CopyFilesAsync(run, Path.Combine(run.Layout.Media, StartnetScript.FilesFolderName))));
+        }
+
         return steps;
     }
 
@@ -285,6 +302,55 @@ public sealed class WinPeBuildService(
     {
         await DismAsync(run, $"/Unmount-Image /MountDir:{CommandSpec.Quote(run.Layout.Mount)} /Commit").ConfigureAwait(false);
         run.Mounted = false;
+    }
+
+    private static async Task WriteStartnetAsync(BuildRun run)
+    {
+        var system32 = Path.Combine(run.Layout.Mount, "Windows", "System32");
+        Directory.CreateDirectory(system32);
+        var script = StartnetScript.Build(run.Options.FilesMode);
+        await File.WriteAllBytesAsync(Path.Combine(system32, "startnet.cmd"), StartnetScript.ToBytes(script), run.Ct).ConfigureAwait(false);
+        run.Log($"startnet.cmd gravado. No WinPE a pasta fica em %ARQUIVOS% e na unidade {StartnetScript.DriveLetter}: ({StartnetScript.DriveLetter}:\\startup.cmd, se existir, roda sozinho).");
+    }
+
+    private static Task CopyFilesAsync(BuildRun run, string destination) => Task.Run(() =>
+    {
+        var source = run.Options.FilesFolder!;
+        var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).ToList();
+        var bytes = files.Sum(f => new FileInfo(f).Length);
+        run.Log($"Copiando {files.Count} arquivo(s), {bytes / (1024 * 1024)} MB, de {source}");
+        FileSystemHelper.CopyDirectory(source, destination, run.Ct);
+        File.WriteAllText(Path.Combine(destination, StartnetScript.MarkerFileName), "WinPE Builder");
+    }, run.Ct);
+
+    /// <summary>Limite de arquivos dentro do boot.wim: tudo isso é carregado na RAM do PC.</summary>
+    public const long MaxInsideImageBytes = 1024L * 1024 * 1024;
+
+    /// <summary>Recusa pastas que se sobrepõem à de trabalho e arquivos grandes demais para a RAM.</summary>
+    private static void CheckFilesFolder(BuildOptions options)
+    {
+        if (options.FilesMode == FilesMode.None)
+        {
+            return;
+        }
+
+        var folder = Path.GetFullPath(options.FilesFolder!).TrimEnd('\\');
+        var work = Path.GetFullPath(options.WorkDirectory).TrimEnd('\\');
+        if (FileSystemHelper.IsInside(folder, work) || FileSystemHelper.IsInside(work, folder) ||
+            string.Equals(folder, work, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BuildException("A pasta de arquivos não pode conter nem estar dentro da pasta de trabalho do aplicativo.");
+        }
+
+        if (options.FilesMode == FilesMode.InsideImage)
+        {
+            var bytes = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+            if (bytes > MaxInsideImageBytes)
+            {
+                throw new BuildException(
+                    $"Os arquivos somam {bytes / (1024 * 1024)} MB; dentro da imagem o limite é {MaxInsideImageBytes / (1024 * 1024)} MB (ocupam RAM). Use o modo \"na ISO\".");
+            }
+        }
     }
 
     // ---- ferramentas ------------------------------------------------------------------------------------
