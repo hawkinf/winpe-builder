@@ -1,0 +1,378 @@
+using WinPEBuilder.Core.Adk;
+using WinPEBuilder.Core.Processes;
+
+namespace WinPEBuilder.Core.Build;
+
+/// <summary>
+/// Gera o WinPE: prepara a base (ADK/copype ou boot.wim de ISO), monta o boot.wim, aplica pacotes e
+/// ajustes, desmonta com commit. A etapa final (arquivos do usuário e ISO) é encadeada em BuildAsync.
+/// </summary>
+/// <param name="runner">Executa DISM/copype/oscdimg.</param>
+/// <param name="locator">Acha o ADK instalado.</param>
+/// <param name="allowedWorkRoot">
+/// Pasta-mãe onde a pasta de trabalho pode ser apagada. Qualquer WorkDirectory fora dela é recusado,
+/// para que um erro de configuração nunca apague pastas do usuário.
+/// </param>
+/// <param name="isoRootFromDrive">Raiz de uma ISO montada na letra dada (troca só em testes).</param>
+public sealed class WinPeBuildService(
+    IProcessRunner runner,
+    AdkLocator locator,
+    string allowedWorkRoot,
+    Func<char, string>? isoRootFromDrive = null)
+{
+    private readonly Func<char, string> _isoRoot = isoRootFromDrive ?? (letter => letter + @":\");
+
+    private sealed record BuildStep(string Name, Func<Task> Execute);
+
+    /// <summary>Estado de uma geração em andamento.</summary>
+    private sealed class BuildRun(BuildOptions options, AdkInstall kit, BuildLayout layout, Action<string> log, CancellationToken ct)
+    {
+        public BuildOptions Options { get; } = options;
+        public AdkInstall Kit { get; } = kit;
+        public BuildLayout Layout { get; } = layout;
+        public Action<string> Log { get; } = log;
+        public CancellationToken Ct { get; } = ct;
+        public bool Mounted { get; set; }
+    }
+
+    public async Task BuildAsync(BuildOptions options, IProgress<BuildProgress> progress, Action<string> log, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(log);
+
+        var errors = options.Validate();
+        if (errors.Count > 0)
+        {
+            throw new BuildException(string.Join(Environment.NewLine, errors));
+        }
+
+        if (!FileSystemHelper.IsInside(options.WorkDirectory, allowedWorkRoot))
+        {
+            throw new BuildException($"A pasta de trabalho precisa ficar dentro de {allowedWorkRoot}.");
+        }
+
+        var kit = ResolveKit(options);
+        var run = new BuildRun(options, kit, new BuildLayout(Path.GetFullPath(options.WorkDirectory)), log, cancellationToken);
+        var steps = PlanSteps(run);
+
+        try
+        {
+            for (var i = 0; i < steps.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                progress.Report(new BuildProgress(i + 1, steps.Count, steps[i].Name));
+                log($"== [{i + 1}/{steps.Count}] {steps[i].Name}");
+                await steps[i].Execute().ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            if (run.Mounted)
+            {
+                // Falha ou cancelamento com a imagem montada: descarta, senão a pasta fica travada.
+                log("Desmontando a imagem (descartando alterações)…");
+                await TryDismAsync(run, $"/Unmount-Image /MountDir:{CommandSpec.Quote(run.Layout.Mount)} /Discard").ConfigureAwait(false);
+                run.Mounted = false;
+            }
+        }
+
+        progress.Report(new BuildProgress(steps.Count, steps.Count, "Concluído"));
+    }
+
+    // ---- planejamento -------------------------------------------------------------------------------
+
+    private AdkInstall ResolveKit(BuildOptions options)
+    {
+        if (options.Source == WinPeSourceKind.Adk)
+        {
+            var kit = locator.FindWinPe(options.Architecture)
+                ?? throw new BuildException(
+                    $"O WinPE add-on do ADK para {options.Architecture.ToDisplayName()} não está instalado. Instale-o na seção Requisitos"
+                    + (options.Architecture == WinPeArchitecture.X86 ? " (32 bits exige o ADK do Windows 10 2004) ou use a fonte \"boot.wim de uma ISO\"." : "."));
+            if (!kit.HasDeploymentTools)
+            {
+                throw new BuildException($"A instalação do ADK em {kit.KitsRoot} está sem o recurso Deployment Tools (DISM/oscdimg). Reinstale o ADK.");
+            }
+
+            return kit;
+        }
+
+        return locator.FindDeploymentTools()
+            ?? throw new BuildException("O Deployment Tools do ADK (DISM + oscdimg) não está instalado. Instale-o na seção Requisitos.");
+    }
+
+    private List<BuildStep> PlanSteps(BuildRun run)
+    {
+        var o = run.Options;
+        var steps = new List<BuildStep>
+        {
+            new("Preparando a pasta de trabalho", () => PrepareWorkDirectoryAsync(run)),
+        };
+
+        if (o.Source == WinPeSourceKind.Adk)
+        {
+            steps.Add(new("Criando a base do WinPE (copype)", () => CopypeAsync(run)));
+        }
+        else
+        {
+            steps.Add(new("Extraindo o boot.wim da ISO", () => ExtractFromIsoAsync(run)));
+        }
+
+        steps.Add(new("Montando o boot.wim", () => MountAsync(run)));
+
+        if (o.OptionalComponents.Count > 0)
+        {
+            steps.Add(new("Adicionando pacotes opcionais", () => AddPackagesAsync(run)));
+        }
+
+        steps.Add(new("Aplicando ajustes (teclado, espaço temporário)", () => ConfigureAsync(run)));
+
+        steps.Add(new("Desmontando e salvando o boot.wim", () => UnmountAsync(run)));
+        return steps;
+    }
+
+    // ---- etapas ---------------------------------------------------------------------------------------
+
+    private async Task PrepareWorkDirectoryAsync(BuildRun run)
+    {
+        var work = run.Layout.WorkDirectory;
+        if (Directory.Exists(work))
+        {
+            run.Log("Limpando restos de uma geração anterior…");
+            // Sobras de montagem de uma execução interrompida impediriam apagar a pasta.
+            await TryDismAsync(run, "/Cleanup-Mountpoints").ConfigureAwait(false);
+            if (Directory.Exists(run.Layout.Mount) && Directory.EnumerateFileSystemEntries(run.Layout.Mount).Any())
+            {
+                await TryDismAsync(run, $"/Unmount-Image /MountDir:{CommandSpec.Quote(run.Layout.Mount)} /Discard").ConfigureAwait(false);
+            }
+
+            FileSystemHelper.DeleteDirectory(work);
+        }
+
+        var parent = Path.GetDirectoryName(work);
+        if (parent is not null)
+        {
+            Directory.CreateDirectory(parent);
+        }
+
+        if (run.Options.Source == WinPeSourceKind.BootWimFromIso)
+        {
+            // O copype cria a pasta sozinho; no modo ISO nós mesmos criamos o mesmo layout.
+            Directory.CreateDirectory(run.Layout.Media);
+            Directory.CreateDirectory(run.Layout.Mount);
+            Directory.CreateDirectory(run.Layout.FwFiles);
+        }
+    }
+
+    private async Task CopypeAsync(BuildRun run)
+    {
+        var command = CommandSpec.Cmd(
+            run.Kit.CopypeCmd,
+            $"{run.Options.Architecture.ToAdkName()} {CommandSpec.Quote(run.Layout.WorkDirectory)}",
+            run.Kit.BuildEnvironment());
+        await ExecuteAsync(run, command, "copype").ConfigureAwait(false);
+
+        if (!File.Exists(run.Layout.BootWim))
+        {
+            throw new BuildException("O copype terminou sem criar media\\sources\\boot.wim. Veja o log.");
+        }
+    }
+
+    private async Task ExtractFromIsoAsync(BuildRun run)
+    {
+        var iso = run.Options.SourceIsoPath!;
+        var drive = await MountIsoAsync(run, iso).ConfigureAwait(false);
+        try
+        {
+            var root = _isoRoot(drive);
+            var sourceWim = Path.Combine(root, "sources", "boot.wim");
+            if (!File.Exists(sourceWim))
+            {
+                throw new BuildException("A ISO não tem sources\\boot.wim — não é uma ISO de instalação do Windows.");
+            }
+
+            var expectedEfi = run.Options.Architecture == WinPeArchitecture.X64 ? "bootx64.efi" : "bootia32.efi";
+            if (!File.Exists(Path.Combine(root, "efi", "boot", expectedEfi)))
+            {
+                run.Log($"AVISO: a ISO não tem efi\\boot\\{expectedEfi}; ela pode ser de outra arquitetura ou sem suporte a UEFI.");
+            }
+
+            run.Log("Copiando arquivos de boot (boot, efi, bootmgr)…");
+            foreach (var folder in new[] { "boot", "efi" })
+            {
+                var from = Path.Combine(root, folder);
+                if (Directory.Exists(from))
+                {
+                    FileSystemHelper.CopyDirectory(from, Path.Combine(run.Layout.Media, folder), run.Ct);
+                }
+            }
+
+            foreach (var file in new[] { "bootmgr", "bootmgr.efi" })
+            {
+                var from = Path.Combine(root, file);
+                if (File.Exists(from))
+                {
+                    var to = Path.Combine(run.Layout.Media, file);
+                    File.Copy(from, to, overwrite: true);
+                    File.SetAttributes(to, FileAttributes.Normal);
+                }
+            }
+
+            Directory.CreateDirectory(run.Layout.SourcesDirectory);
+            // Índice 1 do boot.wim de instalação = WinPE puro (o índice 2 é o Setup). /Bootable marca-o como o de boot.
+            await DismAsync(
+                run,
+                $"/Export-Image /SourceImageFile:{CommandSpec.Quote(sourceWim)} /SourceIndex:1 " +
+                $"/DestinationImageFile:{CommandSpec.Quote(run.Layout.BootWim)} /Compress:max /Bootable").ConfigureAwait(false);
+        }
+        finally
+        {
+            await DismountIsoAsync(run, iso).ConfigureAwait(false);
+        }
+    }
+
+    private async Task MountAsync(BuildRun run)
+    {
+        Directory.CreateDirectory(run.Layout.Mount);
+        await DismAsync(
+            run,
+            $"/Mount-Image /ImageFile:{CommandSpec.Quote(run.Layout.BootWim)} /Index:1 /MountDir:{CommandSpec.Quote(run.Layout.Mount)}").ConfigureAwait(false);
+        run.Mounted = true;
+    }
+
+    private async Task AddPackagesAsync(BuildRun run)
+    {
+        var components = OptionalComponents.Resolve(run.Options.OptionalComponents);
+        var ocs = run.Kit.OptionalComponentsDirectory(run.Options.Architecture);
+        foreach (var component in components)
+        {
+            var neutral = Path.Combine(ocs, component.Name + ".cab");
+            if (!File.Exists(neutral))
+            {
+                throw new BuildException($"Pacote não encontrado no ADK: {neutral}");
+            }
+
+            await DismAsync(run, $"/Image:{CommandSpec.Quote(run.Layout.Mount)} /Add-Package /PackagePath:{CommandSpec.Quote(neutral)}").ConfigureAwait(false);
+
+            var language = Path.Combine(ocs, "en-us", component.Name + "_en-us.cab");
+            if (File.Exists(language))
+            {
+                await DismAsync(run, $"/Image:{CommandSpec.Quote(run.Layout.Mount)} /Add-Package /PackagePath:{CommandSpec.Quote(language)}").ConfigureAwait(false);
+            }
+            else
+            {
+                run.Log($"Aviso: {component.Name} não tem pacote de idioma en-us; seguindo sem ele.");
+            }
+        }
+    }
+
+    private async Task ConfigureAsync(BuildRun run)
+    {
+        var o = run.Options;
+        if (!string.IsNullOrEmpty(o.InputLocale))
+        {
+            await DismAsync(run, $"/Image:{CommandSpec.Quote(run.Layout.Mount)} /Set-InputLocale:{o.InputLocale}").ConfigureAwait(false);
+        }
+
+        if (o.ScratchSpaceMb > 0)
+        {
+            await DismAsync(run, $"/Image:{CommandSpec.Quote(run.Layout.Mount)} /Set-ScratchSpace:{o.ScratchSpaceMb}").ConfigureAwait(false);
+        }
+    }
+
+    private async Task UnmountAsync(BuildRun run)
+    {
+        await DismAsync(run, $"/Unmount-Image /MountDir:{CommandSpec.Quote(run.Layout.Mount)} /Commit").ConfigureAwait(false);
+        run.Mounted = false;
+    }
+
+    // ---- ferramentas ------------------------------------------------------------------------------------
+
+    private Task DismAsync(BuildRun run, string arguments) =>
+        ExecuteAsync(run, new CommandSpec(run.Kit.DismExe, arguments, Environment: run.Kit.BuildEnvironment()), "DISM");
+
+    /// <summary>Executa DISM sem lançar exceção (limpeza em caminhos de erro).</summary>
+    private async Task TryDismAsync(BuildRun run, string arguments)
+    {
+        try
+        {
+            await runner.RunAsync(
+                new CommandSpec(run.Kit.DismExe, arguments, Environment: run.Kit.BuildEnvironment()),
+                line => LogLine(run, line),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            run.Log("Aviso na limpeza: " + ex.Message);
+        }
+    }
+
+    private static void LogLine(BuildRun run, string line)
+    {
+        if (!BuildText.IsProgressNoise(line) && !string.IsNullOrWhiteSpace(line))
+        {
+            run.Log(line);
+        }
+    }
+
+    private async Task ExecuteAsync(BuildRun run, CommandSpec command, string toolName)
+    {
+        run.Log("> " + command);
+        var tail = new Queue<string>();
+        var exit = await runner.RunAsync(command, line =>
+        {
+            LogLine(run, line);
+            if (!string.IsNullOrWhiteSpace(line) && !BuildText.IsProgressNoise(line))
+            {
+                tail.Enqueue(line);
+                if (tail.Count > 8)
+                {
+                    tail.Dequeue();
+                }
+            }
+        }, run.Ct).ConfigureAwait(false);
+
+        if (exit is not (0 or 3010))
+        {
+            throw new BuildException(
+                $"{toolName} falhou (código {exit}).{Environment.NewLine}{string.Join(Environment.NewLine, tail)}");
+        }
+    }
+
+    // ---- ISO montada ----------------------------------------------------------------------------------
+
+    private static string PsQuote(string value) => "'" + value.Replace("'", "''") + "'";
+
+    private async Task<char> MountIsoAsync(BuildRun run, string iso)
+    {
+        var lines = new List<string>();
+        var script = $"(Mount-DiskImage -ImagePath {PsQuote(iso)} -PassThru | Get-Volume).DriveLetter";
+        var command = new CommandSpec("powershell.exe", $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{script}\"");
+        run.Log("> " + command);
+        var exit = await runner.RunAsync(command, lines.Add, run.Ct).ConfigureAwait(false);
+        var letter = lines.Select(l => l.Trim()).FirstOrDefault(l => l.Length == 1 && char.IsLetter(l[0]));
+        if (exit != 0 || letter is null)
+        {
+            throw new BuildException($"Não foi possível montar a ISO.{Environment.NewLine}{string.Join(Environment.NewLine, lines)}");
+        }
+
+        return letter[0];
+    }
+
+    private async Task DismountIsoAsync(BuildRun run, string iso)
+    {
+        try
+        {
+            var script = $"Dismount-DiskImage -ImagePath {PsQuote(iso)} | Out-Null";
+            await runner.RunAsync(
+                new CommandSpec("powershell.exe", $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{script}\""),
+                line => LogLine(run, line),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            run.Log("Aviso ao desmontar a ISO: " + ex.Message);
+        }
+    }
+}

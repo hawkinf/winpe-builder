@@ -30,3 +30,7 @@ scripts/ (PowerShell/UIA PEBakery, check-handoff), config/, tools/, build/, outp
 - Core/Processes: CommandSpec (inclui Cmd() p/ .cmd com aspas corretas e Quote()) + ProcessRunner (saída na codepage OEM, stdin fechado p/ nunca travar em "Y/N"). Core/AppPaths: tudo em %LOCALAPPDATA%\WinPEBuilder (downloads, adk\<id>, work\<arch>).
 - AdkInstaller só aceita instaladores com assinatura Microsoft válida; exit code 3010 = sucesso (reboot).
 - App usa manifest requireAdministrator (DISM exige); `dotnet run` abre pedido de UAC.
+- Core/Build/WinPeBuildService: pipeline em etapas (PlanSteps). Fonte ADK = copype; fonte ISO = Mount-DiskImage + cópia de boot/efi/bootmgr + `dism /Export-Image /SourceIndex:1 /Bootable`. Se algo falhar/cancelar com a imagem montada, o `finally` faz `/Unmount-Image /Discard`.
+- Segurança: a pasta de trabalho só é apagada se estiver DENTRO de allowedWorkRoot (AppPaths.Root); caso contrário BuildException.
+- Pacotes opcionais: OptionalComponents.All tem ordem = ordem de instalação; Resolve() inclui dependências.
+- Armadilha: arquivos copiados de ISO são somente leitura — FileSystemHelper limpa o atributo (senão Directory.Delete falha).
