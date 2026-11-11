@@ -1,3 +1,5 @@
+using WinPEBuilder.Core.Programs;
+
 namespace WinPEBuilder.Core.Build;
 
 /// <summary>De onde vêm os arquivos-base do WinPE.</summary>
@@ -54,6 +56,15 @@ public sealed record BuildOptions
 
     public FilesMode FilesMode { get; init; } = FilesMode.None;
 
+    /// <summary>Programas que aparecem no desktop/menu Iniciar do WinPE (copiados para Arquivos\Programas).</summary>
+    public IReadOnlyList<ProgramEntry> Programs { get; init; } = [];
+
+    /// <summary>
+    /// Modo realmente usado: com programas e sem pasta de arquivos escolhida, os programas vão na ISO
+    /// (não ocupam RAM); o usuário só controla o modo se escolheu um.
+    /// </summary>
+    public FilesMode EffectiveFilesMode => FilesMode == FilesMode.None && Programs.Count > 0 ? FilesMode.OnIso : FilesMode;
+
     /// <summary>Inicia direto, sem o "Pressione qualquer tecla para iniciar do CD" no UEFI.</summary>
     public bool BootWithoutPrompt { get; init; } = true;
 
@@ -79,6 +90,8 @@ public sealed record BuildOptions
         {
             errors.Add("A pasta de arquivos escolhida não existe.");
         }
+
+        errors.AddRange(ProgramEntry.Validate(Programs));
 
         if (string.IsNullOrWhiteSpace(OutputIsoPath) || !OutputIsoPath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
         {

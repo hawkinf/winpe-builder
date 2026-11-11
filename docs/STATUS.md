@@ -20,6 +20,8 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 | WinPEBuilder: injeção de arquivos (`StartnetScript`, modos OnIso/InsideImage) | ✅ | passo 5; 35 testes ok; lógica do startnet.cmd executada de verdade com subst; boot real no WinPE NÃO testado |
 | WinPEBuilder: ISO (`BootFiles` + oscdimg) e gravação em pendrive (`UsbMediaWriter`) | ✅ | passo 6; 48 testes ok; oscdimg REAL validado (ISO com El Torito BIOS+UEFI); pendrive (MakeWinPEMedia /UFD, formata!) NÃO testado |
 | WinPEBuilder: ícone + propriedades do arquivo (`app.ico`, `scripts/make-icon.ps1`) | ✅ | 1.0.0, Hawk Informática; ícone no .exe e nas janelas |
+| Programas no WinPE — passo A1: modelo + manifesto + cópia no build (`Core/Programs`) | ✅ | 74 testes ok; ainda SEM tela no app e SEM launcher |
+| Programas no WinPE — A2 tela "Programas", A3 launcher (WinForms net48), A4 injeção na imagem | ⏳ | opção A escolhida pelo usuário |
 | WinPEBuilder: GUI completa (config, build, log em arquivo, cancelar, pendrive com confirmação digitada, settings.json) | ✅ | passo 7; 52 testes ok; janela abre e renderiza (screenshot), fechar grava settings; fluxo de geração real via GUI NÃO exercitado (exige admin) |
 
 Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com problema.
@@ -35,7 +37,9 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 - Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
 - Executar o app elevado e gerar uma ISO x64 de verdade (copype+DISM+oscdimg) e iniciá-la numa VM — responsável: dono do projeto
 - Testar 32 bits: instalação do ADK 2004 em pasta privada e/ou origem boot.wim de ISO x86 — responsável: dono do projeto
-- Ideias futuras: injeção de drivers, vários idiomas, ícone/tema, publicar binário (self-contained) — qualquer IA
+- Programas no WinPE (opção A): A2 tela no app → A3 launcher WinForms net48 (desktop de ícones + barra + menu Iniciar; lê Arquivosprograms.json) → A4 injetar o launcher + exigir WinPE-NetFx + iniciar no startnet.cmd — qualquer IA
+- Launcher só foi planejado: WinForms em WinPE exige o pacote WinPE-NetFx (origem ADK) e nunca foi testado dentro de um WinPE real — validar em VM
+- Ideias futuras: injeção de drivers, vários idiomas, publicar binário (self-contained), dedupe quando 2 programas vêm da mesma pasta — qualquer IA
 - Gravação em pendrive nunca foi executada de verdade (formata o disco): testar primeiro com um pendrive vazio — responsável: dono do projeto
 - Validar uma geração REAL (x64 via ADK) com o app elevado; só foi testado com runner simulado — responsável: dono do projeto
 - Instalação real do ADK (x64 e x86 em pasta privada via /installpath) ainda não foi exercitada; o instalador pode recusar o ADK 2004 se houver ADK mais novo — fallback: boot.wim de ISO 32 bits (passo 4)
@@ -47,6 +51,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ ArquivosProgramas<id> e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
 - 2026-11-11 — Claude Code — ícone do app (scripts/make-icon.ps1 gera app.ico 16..256), ApplicationIcon + metadados de versão no csproj, Icon nas janelas. Validar: dotnet build; Propriedades > Detalhes do WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 7: GUI completa (MainWindow/UsbWindow), UserSettings, LogFile, fechamento seguro durante operação (cancela e desmonta antes de sair), README. Validar: dotnet test src/WinPEBuilder.sln (52 ok) e abrir WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 6: BootFiles (etfsboot/efisys, prefere noprompt), etapa oscdimg (-m -o -u2 -udfver102 -bootdata BIOS+UEFI), fwfiles preenchido, UsbMediaWriter. Validar: dotnet test src/WinPEBuilder.sln (48 ok); oscdimg real rodado sobre a mídia do ADK e El Torito conferido.

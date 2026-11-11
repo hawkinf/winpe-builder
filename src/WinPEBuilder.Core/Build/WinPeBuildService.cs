@@ -1,3 +1,4 @@
+using WinPEBuilder.Core.Programs;
 using WinPEBuilder.Core.Adk;
 using WinPEBuilder.Core.Processes;
 
@@ -129,19 +130,19 @@ public sealed class WinPeBuildService(
 
         steps.Add(new("Aplicando ajustes (teclado, espaço temporário)", () => ConfigureAsync(run)));
 
-        if (o.FilesMode != FilesMode.None)
+        if (o.EffectiveFilesMode != FilesMode.None)
         {
             steps.Add(new("Criando o script de inicialização (startnet.cmd)", () => WriteStartnetAsync(run)));
         }
 
-        if (o.FilesMode == FilesMode.InsideImage)
+        if (o.EffectiveFilesMode == FilesMode.InsideImage)
         {
             steps.Add(new("Copiando os arquivos para dentro da imagem", () => CopyFilesAsync(run, Path.Combine(run.Layout.Mount, StartnetScript.FilesFolderName))));
         }
 
         steps.Add(new("Desmontando e salvando o boot.wim", () => UnmountAsync(run)));
 
-        if (o.FilesMode == FilesMode.OnIso)
+        if (o.EffectiveFilesMode == FilesMode.OnIso)
         {
             steps.Add(new("Copiando os arquivos para a mídia da ISO", () => CopyFilesAsync(run, Path.Combine(run.Layout.Media, StartnetScript.FilesFolderName))));
         }
@@ -351,18 +352,32 @@ public sealed class WinPeBuildService(
     {
         var system32 = Path.Combine(run.Layout.Mount, "Windows", "System32");
         Directory.CreateDirectory(system32);
-        var script = StartnetScript.Build(run.Options.FilesMode);
+        var script = StartnetScript.Build(run.Options.EffectiveFilesMode);
         await File.WriteAllBytesAsync(Path.Combine(system32, "startnet.cmd"), StartnetScript.ToBytes(script), run.Ct).ConfigureAwait(false);
         run.Log($"startnet.cmd gravado. No WinPE a pasta fica em %ARQUIVOS% e na unidade {StartnetScript.DriveLetter}: ({StartnetScript.DriveLetter}:\\startup.cmd, se existir, roda sozinho).");
     }
 
+    /// <summary>Copia a pasta de arquivos do usuário e os programas (com programs.json) para <paramref name="destination"/>.</summary>
     private static Task CopyFilesAsync(BuildRun run, string destination) => Task.Run(() =>
     {
-        var source = run.Options.FilesFolder!;
-        var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).ToList();
-        var bytes = files.Sum(f => new FileInfo(f).Length);
-        run.Log($"Copiando {files.Count} arquivo(s), {bytes / (1024 * 1024)} MB, de {source}");
-        FileSystemHelper.CopyDirectory(source, destination, run.Ct);
+        Directory.CreateDirectory(destination);
+
+        var source = run.Options.FilesFolder;
+        if (!string.IsNullOrEmpty(source))
+        {
+            var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories).ToList();
+            var bytes = files.Sum(f => new FileInfo(f).Length);
+            run.Log($"Copiando {files.Count} arquivo(s), {bytes / (1024 * 1024)} MB, de {source}");
+            FileSystemHelper.CopyDirectory(source, destination, run.Ct);
+        }
+
+        var programs = run.Options.Programs;
+        if (programs.Count > 0)
+        {
+            run.Log($"Copiando {programs.Count} programa(s), {ProgramStaging.TotalBytes(programs) / (1024 * 1024)} MB, para {ProgramStaging.ProgramsFolderName}\\");
+            ProgramStaging.Stage(programs, destination, run.Ct);
+        }
+
         File.WriteAllText(Path.Combine(destination, StartnetScript.MarkerFileName), "WinPE Builder");
     }, run.Ct);
 
@@ -372,22 +387,36 @@ public sealed class WinPeBuildService(
     /// <summary>Recusa pastas que se sobrepõem à de trabalho e arquivos grandes demais para a RAM.</summary>
     private static void CheckFilesFolder(BuildOptions options)
     {
-        if (options.FilesMode == FilesMode.None)
+        if (options.EffectiveFilesMode == FilesMode.None)
         {
             return;
         }
 
-        var folder = Path.GetFullPath(options.FilesFolder!).TrimEnd('\\');
         var work = Path.GetFullPath(options.WorkDirectory).TrimEnd('\\');
-        if (FileSystemHelper.IsInside(folder, work) || FileSystemHelper.IsInside(work, folder) ||
-            string.Equals(folder, work, StringComparison.OrdinalIgnoreCase))
+        var copiedFolders = new List<string>();
+        if (!string.IsNullOrEmpty(options.FilesFolder))
         {
-            throw new BuildException("A pasta de arquivos não pode conter nem estar dentro da pasta de trabalho do aplicativo.");
+            copiedFolders.Add(Path.GetFullPath(options.FilesFolder).TrimEnd('\\'));
         }
 
-        if (options.FilesMode == FilesMode.InsideImage)
+        copiedFolders.AddRange(options.Programs.Where(p => p.CopyFolder).Select(p => p.SourceFolder.TrimEnd('\\')));
+        foreach (var folder in copiedFolders)
         {
-            var bytes = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+            if (FileSystemHelper.IsInside(folder, work) || FileSystemHelper.IsInside(work, folder) ||
+                string.Equals(folder, work, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BuildException("A pasta de arquivos (ou de um programa) não pode conter nem estar dentro da pasta de trabalho do aplicativo.");
+            }
+        }
+
+        if (options.EffectiveFilesMode == FilesMode.InsideImage)
+        {
+            var bytes = ProgramStaging.TotalBytes(options.Programs);
+            if (!string.IsNullOrEmpty(options.FilesFolder))
+            {
+                bytes += Directory.EnumerateFiles(options.FilesFolder, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+            }
+
             if (bytes > MaxInsideImageBytes)
             {
                 throw new BuildException(
