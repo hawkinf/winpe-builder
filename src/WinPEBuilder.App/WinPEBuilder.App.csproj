@@ -12,6 +12,25 @@
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>WinPEBuilder</AssemblyName>
+    <RootNamespace>WinPEBuilder.App</RootNamespace>
+
+    <!-- Ícone do .exe (Explorer, barra de tarefas, Alt+Tab) — gerado por scripts/make-icon.ps1 -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+
+    <!-- Propriedades do arquivo (botão direito > Propriedades > Detalhes) -->
+    <Version>1.0.0</Version>
+    <Product>WinPE Builder</Product>
+    <AssemblyTitle>WinPE Builder</AssemblyTitle>
+    <Description>Gera ISO de WinPE (32/64 bits, BIOS+UEFI) com os seus arquivos e programas.</Description>
+    <Company>Hawk Informática</Company>
+    <Copyright>© 2026 Hawk Informática</Copyright>
+    <NeutralLanguage>pt-BR</NeutralLanguage>
+    <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Mesmo ícone embutido como recurso para a janela (Icon="app.ico" no XAML) -->
+    <Resource Include="app.ico" />
+  </ItemGroup>
 
 </Project>

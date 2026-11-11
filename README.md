@@ -35,5 +35,5 @@ Executável: `src/WinPEBuilder.App/bin/Debug/net10.0-windows/WinPEBuilder.exe` (
 
 ## Estrutura
 - `src/` – solução C# (Core = lógica, App = GUI WPF, Tests = xUnit)
-- `scripts/` – PowerShell do Test Lab (UIA/PEBakery) e `check-handoff.ps1`
+- `scripts/` – PowerShell do Test Lab (UIA/PEBakery), `check-handoff.ps1` e `make-icon.ps1` (gera o ícone do app)
 - `config/`, `tools/`, `build/`, `output/` – Test Lab (binários ignorados pelo git)
