@@ -37,7 +37,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 - Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
 - Executar o app elevado e gerar uma ISO x64 de verdade (copype+DISM+oscdimg) e iniciá-la numa VM — responsável: dono do projeto
 - Testar 32 bits: instalação do ADK 2004 em pasta privada e/ou origem boot.wim de ISO x86 — responsável: dono do projeto
-- Programas no WinPE (opção A): A2 tela no app → A3 launcher WinForms net48 (desktop de ícones + barra + menu Iniciar; lê Arquivosprograms.json) → A4 injetar o launcher + exigir WinPE-NetFx + iniciar no startnet.cmd — qualquer IA
+- Programas no WinPE (opção A): A2 tela no app → A3 launcher WinForms net48 (desktop de ícones + barra + menu Iniciar; lê Arquivos\programs.json) → A4 injetar o launcher + exigir WinPE-NetFx + iniciar no startnet.cmd — qualquer IA
 - Launcher só foi planejado: WinForms em WinPE exige o pacote WinPE-NetFx (origem ADK) e nunca foi testado dentro de um WinPE real — validar em VM
 - Ideias futuras: injeção de drivers, vários idiomas, publicar binário (self-contained), dedupe quando 2 programas vêm da mesma pasta — qualquer IA
 - Gravação em pendrive nunca foi executada de verdade (formata o disco): testar primeiro com um pendrive vazio — responsável: dono do projeto
@@ -51,11 +51,12 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
-- 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ ArquivosProgramas<id> e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
+- 2026-11-11 — Claude Code — correção de docs: barras invertidas perdidas em linhas do STATUS (passo 5 e A1/A2–A4).
+- 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ Arquivos\Programas\&lt;id&gt; e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
 - 2026-11-11 — Claude Code — ícone do app (scripts/make-icon.ps1 gera app.ico 16..256), ApplicationIcon + metadados de versão no csproj, Icon nas janelas. Validar: dotnet build; Propriedades > Detalhes do WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 7: GUI completa (MainWindow/UsbWindow), UserSettings, LogFile, fechamento seguro durante operação (cancela e desmonta antes de sair), README. Validar: dotnet test src/WinPEBuilder.sln (52 ok) e abrir WinPEBuilder.exe.
 - 2026-11-11 — Claude Code — passo 6: BootFiles (etfsboot/efisys, prefere noprompt), etapa oscdimg (-m -o -u2 -udfver102 -bootdata BIOS+UEFI), fwfiles preenchido, UsbMediaWriter. Validar: dotnet test src/WinPEBuilder.sln (48 ok); oscdimg real rodado sobre a mídia do ADK e El Torito conferido.
-- 2026-11-11 — Claude Code — passo 5: StartnetScript (mapeia a pasta como Z: e %ARQUIVOS%, roda startup.cmd), cópia p/ mediaArquivos (OnIso) ou mountArquivos (InsideImage, máx 1 GB), travas de pasta sobreposta. Validar: dotnet test src/WinPEBuilder.sln (35 ok).
+- 2026-11-11 — Claude Code — passo 5: StartnetScript (mapeia a pasta como Z: e %ARQUIVOS%, roda startup.cmd), cópia p/ media\Arquivos (OnIso) ou mount\Arquivos (InsideImage, máx 1 GB), travas de pasta sobreposta. Validar: dotnet test src/WinPEBuilder.sln (35 ok).
 - 2026-11-11 — Claude Code — passo 4: Core/Build (BuildOptions, OptionalComponents, WinPeBuildService: copype/ISO→boot.wim, mount, pacotes, locale, scratch, unmount commit/discard). Validar: dotnet test src/WinPEBuilder.sln (28 ok).
 - 2026-11-11 — Claude Code — passo 3: Processes/ (CommandSpec, ProcessRunner), AdkRelease/AdkCatalog, AdkInstaller (download + verificação Authenticode Microsoft + instalação silenciosa), AppPaths, manifesto requireAdministrator, GUI com botões/progresso/log. Validar: dotnet test src/WinPEBuilder.sln (17 ok).
 - 2026-11-11 — Claude Code — passo 2: AdkInstall/AdkLocator (Core/Adk), painel de status na GUI; Core/Tests agora net10.0-windows. Validar: dotnet test src/WinPEBuilder.sln (8 ok).
