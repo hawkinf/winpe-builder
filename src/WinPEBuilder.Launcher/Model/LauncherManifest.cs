@@ -1,6 +1,7 @@
 #nullable disable
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
@@ -26,6 +27,10 @@ namespace WinPEBuilder.Launcher.Model
         /// <summary>Ordem do menu Iniciar escolhida a mao: chaves "c:CATEGORIA" e "p:id" (opcional; vazio = alfabetica).</summary>
         [DataMember(Name = "menuOrder")]
         public List<string> MenuOrder { get; set; }
+
+        /// <summary>Papel de parede (opcional; ausente = cor padrao).</summary>
+        [DataMember(Name = "wallpaper")]
+        public WallpaperInfo Wallpaper { get; set; }
     }
 
     /// <summary>Posição de um ícone na grade da área de trabalho. key = "p:&lt;id&gt;" (programa) ou "f:&lt;NOME EM MAIÚSCULAS&gt;" (pasta).</summary>
@@ -70,6 +75,20 @@ namespace WinPEBuilder.Launcher.Model
         /// <summary>Nome da pasta da área de trabalho a que pertence (vazio = nenhuma). Campo opcional do manifesto v1.</summary>
         [DataMember(Name = "folder")]
         public string Folder { get; set; }
+    }
+
+    /// <summary>Papel de parede: arquivo (relativo a pasta Arquivos; vazio = so cor), modo e cor de fundo.</summary>
+    [DataContract]
+    public class WallpaperInfo
+    {
+        [DataMember(Name = "file")]
+        public string File { get; set; }
+
+        [DataMember(Name = "mode")]
+        public string Mode { get; set; }
+
+        [DataMember(Name = "color")]
+        public string Color { get; set; }
     }
 
     /// <summary>Conteudo de uma pasta da area de trabalho.</summary>
@@ -135,6 +154,17 @@ namespace WinPEBuilder.Launcher.Model
 
             manifest.Programs = valid;
             manifest.MenuOrder = (manifest.MenuOrder ?? new List<string>()).Where(k => !string.IsNullOrEmpty(k)).ToList();
+            if (manifest.Wallpaper != null)
+            {
+                manifest.Wallpaper.Mode = WallpaperGeometry.NormalizeMode(manifest.Wallpaper.Mode);
+                manifest.Wallpaper.File = manifest.Wallpaper.File ?? string.Empty;
+                System.Drawing.Color ignored;
+                if (!WallpaperGeometry.TryParseColor(manifest.Wallpaper.Color, out ignored))
+                {
+                    manifest.Wallpaper.Color = WallpaperGeometry.DefaultColor;
+                }
+            }
+
             manifest.Layout = (manifest.Layout ?? new List<LayoutEntry>())
                 .Where(l => l != null && !string.IsNullOrEmpty(l.Key) && l.Col >= 0 && l.Row >= 0)
                 .ToList();
@@ -152,7 +182,13 @@ namespace WinPEBuilder.Launcher.Model
         /// </summary>
         public static string ResolveExe(string filesRoot, ProgramItem program)
         {
-            if (string.IsNullOrWhiteSpace(filesRoot) || program == null || string.IsNullOrWhiteSpace(program.Exe))
+            return program == null ? null : ResolveRelative(filesRoot, program.Exe);
+        }
+
+        /// <summary>Caminho completo de um arquivo relativo a pasta Arquivos, ou null se tentar sair dela.</summary>
+        public static string ResolveRelative(string filesRoot, string relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(filesRoot) || string.IsNullOrWhiteSpace(relativePath))
             {
                 return null;
             }
@@ -162,7 +198,7 @@ namespace WinPEBuilder.Launcher.Model
             try
             {
                 root = Path.GetFullPath(filesRoot).TrimEnd('\\') + "\\";
-                full = Path.GetFullPath(Path.Combine(root, program.Exe));
+                full = Path.GetFullPath(Path.Combine(root, relativePath));
             }
             catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException || ex is PathTooLongException)
             {
@@ -170,6 +206,65 @@ namespace WinPEBuilder.Launcher.Model
             }
 
             return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full : null;
+        }
+
+        /// <summary>
+        /// Distribui os icones na grade (colunas x linhas visiveis). Quem tem posicao no layout, dentro da grade e sem
+        /// conflito, fica nela; os demais vao para as celulas livres, coluna por coluna de cima para baixo.
+        /// </summary>
+        public static Dictionary<string, Point> PlaceIcons(IList<string> keys, IEnumerable<LayoutEntry> layout, int columns, int rows)
+        {
+            columns = Math.Max(1, columns);
+            rows = Math.Max(1, rows);
+            var byKey = new Dictionary<string, LayoutEntry>(StringComparer.Ordinal);
+            foreach (var entry in layout ?? new List<LayoutEntry>())
+            {
+                byKey[entry.Key] = entry;
+            }
+
+            var result = new Dictionary<string, Point>(StringComparer.Ordinal);
+            var occupied = new HashSet<Point>();
+            foreach (var key in keys)
+            {
+                LayoutEntry entry;
+                if (byKey.TryGetValue(key, out entry) && entry.Col < columns && entry.Row < rows && occupied.Add(new Point(entry.Col, entry.Row)))
+                {
+                    result[key] = new Point(entry.Col, entry.Row);
+                }
+            }
+
+            foreach (var key in keys)
+            {
+                if (result.ContainsKey(key))
+                {
+                    continue;
+                }
+
+                var cell = new Point(columns - 1, rows - 1); // grade lotada: sobrepoe no canto (nunca esconde o item)
+                for (var col = 0; col < columns; col++)
+                {
+                    var found = false;
+                    for (var row = 0; row < rows; row++)
+                    {
+                        if (!occupied.Contains(new Point(col, row)))
+                        {
+                            cell = new Point(col, row);
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if (found)
+                    {
+                        break;
+                    }
+                }
+
+                occupied.Add(cell);
+                result[key] = cell;
+            }
+
+            return result;
         }
 
         public static string CategoryKey(string category)
@@ -307,7 +402,7 @@ namespace WinPEBuilder.Launcher.Model
         /// Posição (em pixels) de cada chave que tem entrada no layout; chaves sem entrada ficam de fora. Se alguma chave
         /// pedida não tiver posição, devolve null (o chamador usa a arrumação automática para todos).
         /// </summary>
-        public static Dictionary<string, System.Drawing.Point> PixelPositions(IEnumerable<LayoutEntry> layout, IEnumerable<string> keys)
+        public static Dictionary<string, Point> PixelPositions(IEnumerable<LayoutEntry> layout, IEnumerable<string> keys)
         {
             var byKey = new Dictionary<string, LayoutEntry>(StringComparer.Ordinal);
             foreach (var entry in layout)
@@ -315,7 +410,7 @@ namespace WinPEBuilder.Launcher.Model
                 byKey[entry.Key] = entry;
             }
 
-            var result = new Dictionary<string, System.Drawing.Point>(StringComparer.Ordinal);
+            var result = new Dictionary<string, Point>(StringComparer.Ordinal);
             foreach (var key in keys)
             {
                 LayoutEntry entry;
@@ -324,7 +419,7 @@ namespace WinPEBuilder.Launcher.Model
                     return null;
                 }
 
-                result[key] = new System.Drawing.Point(entry.Col * CellSize, entry.Row * CellSize);
+                result[key] = new Point(entry.Col * CellSize, entry.Row * CellSize);
             }
 
             return result;

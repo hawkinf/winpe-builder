@@ -19,6 +19,7 @@ public sealed record UserSettings
     public ProgramEntry[] Programs { get; init; } = [];
     public Dictionary<string, DesktopSlot> DesktopLayout { get; init; } = [];
     public string[] StartMenuOrder { get; init; } = [];
+    public WallpaperSettings Wallpaper { get; init; } = new();
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

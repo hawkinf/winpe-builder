@@ -1,106 +1,83 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.IO;
 using System.Windows.Forms;
 using WinPEBuilder.Launcher.Model;
 
 namespace WinPEBuilder.Launcher
 {
-    /// <summary>Área de trabalho: tela cheia atrás de tudo, com os ícones dos programas marcados para o desktop.</summary>
+    /// <summary>
+    /// Área de trabalho: tela cheia atrás de tudo, com papel de parede (cor e/ou imagem) e os ícones dos programas
+    /// marcados para o desktop, posicionados na grade escolhida no editor visual.
+    /// </summary>
     internal sealed class DesktopForm : Form
     {
-        private static readonly Color DesktopColor = Color.FromArgb(18, 70, 120);
-
         private readonly bool _preview;
         private readonly TaskbarForm _taskbar;
-        private readonly ListView _icons;
-        private Rectangle _originalWorkArea;
+        private readonly ProgramRunner _runner;
         private readonly List<LayoutEntry> _layout;
+        private readonly List<KeyValuePair<string, DesktopIcon>> _icons = new List<KeyValuePair<string, DesktopIcon>>();
+        private readonly ToolTip _tips = new ToolTip();
+        private readonly Color _color;
+        private readonly string _wallpaperMode;
+        private Image _wallpaperImage;
+        private Bitmap _wallpaperBitmap;
+        private DesktopIcon _selected;
+        private Rectangle _originalWorkArea;
 
-        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, List<string> menuOrder, bool preview, string notice)
+        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, List<string> menuOrder,
+            WallpaperInfo wallpaper, bool preview, string notice)
         {
             _preview = preview;
+            _runner = runner;
+            _layout = layout;
             _taskbar = new TaskbarForm(runner, programs, menuOrder, preview);
+
+            _color = WallpaperGeometry.ParseColor(wallpaper == null ? null : wallpaper.Color);
+            _wallpaperMode = WallpaperGeometry.NormalizeMode(wallpaper == null ? null : wallpaper.Mode);
+            LoadWallpaper(wallpaper);
 
             Text = "WinPE Launcher (teste)";
             Icon = SystemIcons.Application;
-            BackColor = DesktopColor;
+            BackColor = _color;
             Font = SystemFonts.MessageBoxFont;
             StartPosition = FormStartPosition.Manual;
-            ShowInTaskbar = preview;
+            ShowInStartTaskbar(preview);
+            DoubleBuffered = true;
+            ResizeRedraw = true;
+            KeyPreview = true;
 
-            _icons = new ListView
-            {
-                Dock = DockStyle.Fill,
-                View = View.LargeIcon,
-                BackColor = DesktopColor,
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.None,
-                MultiSelect = false,
-                HideSelection = false,
-                ShowItemToolTips = true,
-                Activation = ItemActivation.Standard,
-            };
-
-            var images = new ImageList { ImageSize = new Size(32, 32), ColorDepth = ColorDepth.Depth32Bit };
-            _icons.LargeImageList = images;
             // Pastas primeiro (como no Explorer), depois os programas soltos.
             foreach (var group in ManifestReader.DesktopFolders(programs))
             {
-                images.Images.Add(FolderIcon.Create(32));
                 var folder = new DesktopFolder(group.Key, group.Value);
-                _icons.Items.Add(new ListViewItem(group.Key, images.Images.Count - 1)
-                {
-                    Tag = folder,
-                    ToolTipText = group.Value.Count + " programa(s)",
-                });
+                AddIcon(ManifestReader.FolderKey(group.Key), FolderIcon.Create(32), group.Key, folder, group.Value.Count + " programa(s)");
             }
 
             foreach (var program in ManifestReader.ForDesktop(programs))
             {
-                images.Images.Add(ProgramRunner.LoadIcon(runner.ExePath(program), 32));
-                _icons.Items.Add(new ListViewItem(program.Name, images.Images.Count - 1) { Tag = program, ToolTipText = program.Exe });
+                AddIcon(ManifestReader.ProgramKey(program), ProgramRunner.LoadIcon(runner.ExePath(program), 32), program.Name, program, program.Exe);
             }
 
-            _icons.ItemActivate += (s, e) =>
-            {
-                if (_icons.SelectedItems.Count == 0)
-                {
-                    return;
-                }
-
-                var tag = _icons.SelectedItems[0].Tag;
-                var item = tag as ProgramItem;
-                if (item != null)
-                {
-                    _taskbar.Launch(item);
-                    return;
-                }
-
-                OpenFolder((DesktopFolder)tag, runner);
-            };
-
-            _layout = layout;
-            Controls.Add(_icons);
-
             var message = notice;
-            if (string.IsNullOrEmpty(message) && _icons.Items.Count == 0)
+            if (string.IsNullOrEmpty(message) && _icons.Count == 0)
             {
                 message = "Nenhum programa na área de trabalho. Use o menu Iniciar.";
             }
 
             if (!string.IsNullOrEmpty(message))
             {
-                var label = new Label
+                Controls.Add(new Label
                 {
                     Dock = DockStyle.Bottom,
                     Height = 40,
                     ForeColor = Color.White,
-                    BackColor = DesktopColor,
+                    BackColor = Color.Transparent,
                     TextAlign = ContentAlignment.MiddleLeft,
                     Text = message,
-                };
-                Controls.Add(label);
+                });
             }
 
             if (preview)
@@ -125,35 +102,170 @@ namespace WinPEBuilder.Launcher
             }
         }
 
-        /// <summary>
-        /// Posiciona os ícones na grade gravada pelo editor visual. Se faltar posição para algum ícone, deixa a
-        /// arrumação automática do ListView para todos (nunca esconde um programa).
-        /// </summary>
-        private void ApplyLayout(List<LayoutEntry> layout)
+        private void ShowInStartTaskbar(bool preview)
         {
-            if (layout == null || layout.Count == 0 || _icons.Items.Count == 0)
+            ShowInTaskbar = preview;
+        }
+
+        // ---- papel de parede ------------------------------------------------------------------------------
+
+        private void LoadWallpaper(WallpaperInfo wallpaper)
+        {
+            if (wallpaper == null || string.IsNullOrEmpty(wallpaper.File))
             {
                 return;
             }
 
+            var path = ManifestReader.ResolveRelative(_runner.FilesRoot, wallpaper.File);
+            if (path == null || !File.Exists(path))
+            {
+                AppLog.Write("papel de parede não encontrado: " + wallpaper.File);
+                return;
+            }
+
+            try
+            {
+                // copia para um Bitmap próprio: não deixa o arquivo (na mídia) aberto
+                using (var stream = File.OpenRead(path))
+                using (var loaded = Image.FromStream(stream))
+                {
+                    _wallpaperImage = new Bitmap(loaded);
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is OutOfMemoryException || ex is UnauthorizedAccessException)
+            {
+                // GDI+ lança OutOfMemoryException para arquivos que não são imagem
+                AppLog.Write("papel de parede ilegível (" + wallpaper.File + "): " + ex.Message);
+            }
+        }
+
+        /// <summary>Desenha o papel de parede já no tamanho da tela (uma vez por tamanho, não a cada repintura).</summary>
+        private void RebuildWallpaperBitmap()
+        {
+            var size = ClientSize;
+            if (_wallpaperImage == null || size.Width <= 0 || size.Height <= 0)
+            {
+                return;
+            }
+
+            if (_wallpaperBitmap != null && _wallpaperBitmap.Size == size)
+            {
+                return;
+            }
+
+            var bitmap = new Bitmap(size.Width, size.Height);
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(_color);
+                g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                foreach (var rect in WallpaperGeometry.Compute(_wallpaperMode, _wallpaperImage.Width, _wallpaperImage.Height, size.Width, size.Height))
+                {
+                    g.DrawImage(_wallpaperImage, rect);
+                }
+            }
+
+            if (_wallpaperBitmap != null)
+            {
+                _wallpaperBitmap.Dispose();
+            }
+
+            _wallpaperBitmap = bitmap;
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            RebuildWallpaperBitmap();
+            if (_wallpaperBitmap != null)
+            {
+                e.Graphics.DrawImageUnscaled(_wallpaperBitmap, 0, 0);
+            }
+            else
+            {
+                base.OnPaintBackground(e);
+            }
+        }
+
+        // ---- ícones -----------------------------------------------------------------------------------------
+
+        private void AddIcon(string key, Image image, string label, object payload, string tooltip)
+        {
+            var icon = new DesktopIcon(image, label, payload);
+            icon.Font = Font;
+            icon.Chosen += (s, e) => Select((DesktopIcon)s);
+            icon.Activated += (s, e) => ActivateIcon((DesktopIcon)s);
+            _tips.SetToolTip(icon, tooltip);
+            Controls.Add(icon);
+            _icons.Add(new KeyValuePair<string, DesktopIcon>(key, icon));
+        }
+
+        private void Select(DesktopIcon icon)
+        {
+            if (_selected != null && !ReferenceEquals(_selected, icon))
+            {
+                _selected.Selected = false;
+            }
+
+            _selected = icon;
+            if (icon != null)
+            {
+                icon.Selected = true;
+            }
+        }
+
+        private void ActivateIcon(DesktopIcon icon)
+        {
+            var program = icon.Payload as ProgramItem;
+            if (program != null)
+            {
+                _taskbar.Launch(program);
+                return;
+            }
+
+            OpenFolder((DesktopFolder)icon.Payload, _runner);
+        }
+
+        /// <summary>
+        /// Posiciona os ícones na grade do editor visual (coluna x linha de 80 px). O que não tiver posição, ou cair fora da
+        /// tela, vai para a primeira célula livre: nunca esconde um programa.
+        /// </summary>
+        private void LayoutIcons()
+        {
+            var cell = ManifestReader.CellSize;
             var keys = new List<string>();
-            foreach (ListViewItem item in _icons.Items)
+            foreach (var pair in _icons)
             {
-                var program = item.Tag as ProgramItem;
-                keys.Add(program != null ? ManifestReader.ProgramKey(program) : ManifestReader.FolderKey(((DesktopFolder)item.Tag).Name));
+                keys.Add(pair.Key);
             }
 
-            var positions = ManifestReader.PixelPositions(layout, keys);
-            if (positions == null)
+            var cells = ManifestReader.PlaceIcons(keys, _layout, ClientSize.Width / cell, ClientSize.Height / cell);
+            foreach (var pair in _icons)
             {
-                AppLog.Write("layout incompleto no manifesto: usando arrumação automática");
-                return;
+                var at = cells[pair.Key];
+                pair.Value.Location = new Point((at.X * cell) + 2, (at.Y * cell) + 2);
             }
+        }
 
-            _icons.AutoArrange = false;
-            for (var i = 0; i < _icons.Items.Count; i++)
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            LayoutIcons();
+            Invalidate();
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            Select(null);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Enter && _selected != null)
             {
-                _icons.Items[i].Position = positions[keys[i]];
+                _selected.Activate();
+                e.Handled = true;
             }
         }
 
@@ -178,7 +290,7 @@ namespace WinPEBuilder.Launcher
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            ApplyLayout(_layout); // só funciona com o handle do ListView já criado
+            LayoutIcons();
             _taskbar.Show();
             if (!_preview)
             {
@@ -214,6 +326,16 @@ namespace WinPEBuilder.Launcher
             if (disposing)
             {
                 _taskbar.Dispose();
+                _tips.Dispose();
+                if (_wallpaperImage != null)
+                {
+                    _wallpaperImage.Dispose();
+                }
+
+                if (_wallpaperBitmap != null)
+                {
+                    _wallpaperBitmap.Dispose();
+                }
             }
 
             base.Dispose(disposing);

@@ -65,6 +65,9 @@ public sealed record BuildOptions
     /// <summary>Ordem do menu Iniciar escolhida a mao (chaves c:CATEGORIA e p:id). Vazio = alfabetica.</summary>
     public IReadOnlyList<string> StartMenuOrder { get; init; } = [];
 
+    /// <summary>Papel de parede da area de trabalho do WinPE (imagem ou cor).</summary>
+    public WallpaperSettings Wallpaper { get; init; } = new();
+
     /// <summary>
     /// Modo realmente usado: com programas e sem pasta de arquivos escolhida, os programas vão na ISO
     /// (não ocupam RAM); o usuário só controla o modo se escolheu um.
@@ -114,6 +117,7 @@ public sealed record BuildOptions
         }
 
         errors.AddRange(ProgramEntry.Validate(Programs));
+        errors.AddRange(WallpaperSettings.Validate(Wallpaper));
 
         if (InstallLauncher && !File.Exists(LauncherExePath))
         {

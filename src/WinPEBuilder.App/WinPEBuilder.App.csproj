@@ -56,6 +56,11 @@
   </Target>
 
   <ItemGroup>
+    <!-- Geometria do papel de parede: o MESMO código do launcher, para o preview sair igual ao WinPE. -->
+    <Compile Include="..\WinPEBuilder.Launcher\Model\WallpaperGeometry.cs" Link="Shared\WallpaperGeometry.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Mesmo ícone embutido como recurso para a janela (Icon="app.ico" no XAML) -->
     <Resource Include="app.ico" />
   </ItemGroup>

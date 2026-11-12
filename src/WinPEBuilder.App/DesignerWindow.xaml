@@ -79,6 +79,7 @@
                 <Button x:Name="EditButton" Content="Editar…" IsEnabled="False" Click="Edit_Click"/>
                 <Button x:Name="RemoveButton" Content="Remover" IsEnabled="False" Click="Remove_Click"/>
                 <Button Content="Reorganizar ícones" Click="AutoArrange_Click" ToolTip="Arruma todos os ícones em ordem alfabética"/>
+                <Button Content="Papel de parede…" Click="Wallpaper_Click" ToolTip="Escolher a imagem ou a cor de fundo da área de trabalho"/>
             </StackPanel>
             <ListBox x:Name="ProgramList" SelectionMode="Single" SelectionChanged="ProgramList_SelectionChanged"
                      MouseDoubleClick="ProgramList_DoubleClick" PreviewMouseLeftButtonDown="ProgramList_PreviewMouseLeftButtonDown"

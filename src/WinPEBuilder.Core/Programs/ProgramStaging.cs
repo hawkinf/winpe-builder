@@ -53,7 +53,7 @@ public static class ProgramStaging
     /// área de trabalho (campo opcional "layout"); sem ele o launcher arruma os ícones sozinho.
     /// </summary>
     public static string BuildManifest(IReadOnlyList<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout = null,
-        IReadOnlyList<string>? menuOrder = null)
+        IReadOnlyList<string>? menuOrder = null, WallpaperSettings? wallpaper = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         var slots = layout is { Count: > 0 }
@@ -75,6 +75,14 @@ public static class ProgramStaging
             }),
             layout = slots?.Select(kv => new { key = kv.Key, col = kv.Value.Col, row = kv.Value.Row }).ToArray(),
             menuOrder = menuOrder is { Count: > 0 } ? StartMenuModel.Flatten(StartMenuModel.Build(programs, menuOrder)).ToArray() : null,
+            wallpaper = wallpaper is null || wallpaper.IsDefault
+                ? null
+                : new
+                {
+                    file = wallpaper.HasImage ? wallpaper.StagedFileName : string.Empty,
+                    mode = wallpaper.Mode.ToString().ToLowerInvariant(),
+                    color = wallpaper.Color.ToUpperInvariant(),
+                },
         };
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
@@ -101,7 +109,7 @@ public static class ProgramStaging
 
     /// <summary>Copia cada programa para Arquivos\Programas\&lt;pasta&gt; e grava o manifesto em Arquivos\programs.json.</summary>
     public static void Stage(IReadOnlyList<ProgramEntry> programs, string filesRoot, CancellationToken cancellationToken = default,
-        IReadOnlyDictionary<string, DesktopSlot>? layout = null, IReadOnlyList<string>? menuOrder = null)
+        IReadOnlyDictionary<string, DesktopSlot>? layout = null, IReadOnlyList<string>? menuOrder = null, WallpaperSettings? wallpaper = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         if (programs.Count == 0)
@@ -130,7 +138,14 @@ public static class ProgramStaging
             }
         }
 
+        if (wallpaper is { HasImage: true })
+        {
+            var target = Path.Combine(filesRoot, wallpaper.StagedFileName);
+            File.Copy(wallpaper.ImagePath, target, overwrite: true);
+            File.SetAttributes(target, FileAttributes.Normal);
+        }
+
         // UTF-8 sem BOM: o launcher (DataContractJsonSerializer) lê direto.
-        File.WriteAllText(Path.Combine(filesRoot, ManifestFileName), BuildManifest(programs, layout, menuOrder), new System.Text.UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(filesRoot, ManifestFileName), BuildManifest(programs, layout, menuOrder, wallpaper), new System.Text.UTF8Encoding(false));
     }
 }

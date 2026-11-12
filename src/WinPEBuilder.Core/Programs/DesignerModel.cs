@@ -10,12 +10,15 @@ public sealed class DesignerModel
     private readonly List<ProgramEntry> _programs;
     private Dictionary<string, DesktopSlot> _layout;
     private List<string> _menuOrder;
+    private WallpaperSettings _wallpaper;
 
-    public DesignerModel(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null)
+    public DesignerModel(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null,
+        WallpaperSettings? wallpaper = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         _programs = [.. programs];
         _menuOrder = [.. menuOrder ?? []];
+        _wallpaper = wallpaper ?? new WallpaperSettings();
         _layout = DesktopLayoutHelper.Normalize(DesktopLayoutHelper.Items(_programs), layout);
     }
 
@@ -371,6 +374,24 @@ public sealed class DesignerModel
         }
 
         Refresh(null);
+        Dirty = true;
+        return true;
+    }
+
+    // ---- papel de parede ----
+
+    /// <summary>Papel de parede atual (faz parte do que se grava ou descarta).</summary>
+    public WallpaperSettings Wallpaper => _wallpaper;
+
+    public bool SetWallpaper(WallpaperSettings wallpaper)
+    {
+        ArgumentNullException.ThrowIfNull(wallpaper);
+        if (wallpaper == _wallpaper)
+        {
+            return false;
+        }
+
+        _wallpaper = wallpaper;
         Dirty = true;
         return true;
     }

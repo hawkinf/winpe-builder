@@ -61,10 +61,13 @@ public partial class DesignerWindow : Window
     /// <summary>Ordem do menu Iniciar (lista completa), para gravar.</summary>
     public IReadOnlyList<string> MenuOrder => _model.MenuOrder;
 
-    public DesignerWindow(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null)
+    public WallpaperSettings Wallpaper => _model.Wallpaper;
+
+    public DesignerWindow(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null,
+        WallpaperSettings? wallpaper = null)
     {
         InitializeComponent();
-        _model = new DesignerModel(programs, layout, menuOrder);
+        _model = new DesignerModel(programs, layout, menuOrder, wallpaper);
         _highlight = new Border
         {
             Width = Cell,
@@ -82,6 +85,7 @@ public partial class DesignerWindow : Window
         _clock.Start();
         Closed += (_, _) => _clock.Stop();
 
+        ApplyWallpaper();
         Render();
     }
 
@@ -1054,6 +1058,24 @@ public partial class DesignerWindow : Window
         Render();
     }
 
+
+    // ==== papel de parede ========================================================================================
+
+    private void ApplyWallpaper()
+    {
+        var image = WallpaperRenderer.Render(_model.Wallpaper, (int)DesktopCanvas.Width, (int)DesktopCanvas.Height);
+        DesktopCanvas.Background = new ImageBrush(image);
+    }
+
+    private void Wallpaper_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new WallpaperWindow(_model.Wallpaper) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is not null && _model.SetWallpaper(dialog.Result))
+        {
+            ApplyWallpaper();
+            Render();
+        }
+    }
 
     // ==== ordem do menu Iniciar ===================================================================================
 

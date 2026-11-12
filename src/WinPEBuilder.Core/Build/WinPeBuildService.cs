@@ -395,7 +395,7 @@ public sealed class WinPeBuildService(
         if (programs.Count > 0)
         {
             run.Log($"Copiando {programs.Count} programa(s), {ProgramStaging.TotalBytes(programs) / (1024 * 1024)} MB, para {ProgramStaging.ProgramsFolderName}\\");
-            ProgramStaging.Stage(programs, destination, run.Ct, run.Options.DesktopLayout, run.Options.StartMenuOrder);
+            ProgramStaging.Stage(programs, destination, run.Ct, run.Options.DesktopLayout, run.Options.StartMenuOrder, run.Options.Wallpaper);
         }
 
         File.WriteAllText(Path.Combine(destination, StartnetScript.MarkerFileName), "WinPE Builder");
@@ -432,6 +432,11 @@ public sealed class WinPeBuildService(
         if (options.EffectiveFilesMode == FilesMode.InsideImage)
         {
             var bytes = ProgramStaging.TotalBytes(options.Programs);
+            if (options.Wallpaper.HasImage && File.Exists(options.Wallpaper.ImagePath))
+            {
+                bytes += new FileInfo(options.Wallpaper.ImagePath).Length;
+            }
+
             if (!string.IsNullOrEmpty(options.FilesFolder))
             {
                 bytes += Directory.EnumerateFiles(options.FilesFolder, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);

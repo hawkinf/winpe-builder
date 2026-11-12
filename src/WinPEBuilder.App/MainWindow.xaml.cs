@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private List<ProgramEntry> _programs = [];
     private Dictionary<string, DesktopSlot> _layout = [];
     private List<string> _menuOrder = [];
+    private WallpaperSettings _wallpaper = new();
     private int _summaryVersion;
     private CancellationTokenSource? _cts;
     private LogFile? _logFile;
@@ -115,6 +116,7 @@ public partial class MainWindow : Window
         _programs = [.. s.Programs];
         _layout = new Dictionary<string, DesktopSlot>(s.DesktopLayout);
         _menuOrder = [.. s.StartMenuOrder];
+        _wallpaper = s.Wallpaper ?? new WallpaperSettings();
         RefreshPrograms();
         _lastOutputDefault = DefaultOutputPath(s.Architecture);
         OutputBox.Text = string.IsNullOrWhiteSpace(s.OutputIsoPath) ? _lastOutputDefault : s.OutputIsoPath;
@@ -134,6 +136,7 @@ public partial class MainWindow : Window
         Programs = [.. _programs],
         DesktopLayout = _layout,
         StartMenuOrder = [.. _menuOrder],
+        Wallpaper = _wallpaper,
     };
 
     /// <summary>Monta as opções de geração a partir da tela; null (com mensagem) se algo estiver inválido.</summary>
@@ -158,6 +161,7 @@ public partial class MainWindow : Window
                 Programs = s.Programs,
                 DesktopLayout = PrunedLayout(s.Programs, s.DesktopLayout),
                 StartMenuOrder = s.StartMenuOrder,
+                Wallpaper = s.Wallpaper,
                 LauncherExePath = LauncherPath,
             };
         }
@@ -363,7 +367,7 @@ public partial class MainWindow : Window
 
     private void DesignerButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new DesignerWindow(_programs, _layout, _menuOrder) { Owner = this };
+        var dialog = new DesignerWindow(_programs, _layout, _menuOrder, _wallpaper) { Owner = this };
         dialog.ShowDialog();
         if (!dialog.Saved)
         {
@@ -373,6 +377,7 @@ public partial class MainWindow : Window
         _programs = [.. dialog.Programs];
         _layout = new Dictionary<string, DesktopSlot>(dialog.Layout);
         _menuOrder = [.. dialog.MenuOrder];
+        _wallpaper = dialog.Wallpaper;
         RefreshPrograms();
     }
 
