@@ -395,7 +395,7 @@ public sealed class WinPeBuildService(
         if (programs.Count > 0)
         {
             run.Log($"Copiando {programs.Count} programa(s), {ProgramStaging.TotalBytes(programs) / (1024 * 1024)} MB, para {ProgramStaging.ProgramsFolderName}\\");
-            ProgramStaging.Stage(programs, destination, run.Ct, run.Options.DesktopLayout);
+            ProgramStaging.Stage(programs, destination, run.Ct, run.Options.DesktopLayout, run.Options.StartMenuOrder);
         }
 
         File.WriteAllText(Path.Combine(destination, StartnetScript.MarkerFileName), "WinPE Builder");

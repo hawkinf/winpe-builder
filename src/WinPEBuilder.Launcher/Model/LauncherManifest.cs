@@ -22,6 +22,10 @@ namespace WinPEBuilder.Launcher.Model
         /// <summary>Posição de cada ícone da área de trabalho (opcional; vazio = arrumação automática).</summary>
         [DataMember(Name = "layout")]
         public List<LayoutEntry> Layout { get; set; }
+
+        /// <summary>Ordem do menu Iniciar escolhida a mao: chaves "c:CATEGORIA" e "p:id" (opcional; vazio = alfabetica).</summary>
+        [DataMember(Name = "menuOrder")]
+        public List<string> MenuOrder { get; set; }
     }
 
     /// <summary>Posição de um ícone na grade da área de trabalho. key = "p:&lt;id&gt;" (programa) ou "f:&lt;NOME EM MAIÚSCULAS&gt;" (pasta).</summary>
@@ -122,6 +126,7 @@ namespace WinPEBuilder.Launcher.Model
             }
 
             manifest.Programs = valid;
+            manifest.MenuOrder = (manifest.MenuOrder ?? new List<string>()).Where(k => !string.IsNullOrEmpty(k)).ToList();
             manifest.Layout = (manifest.Layout ?? new List<LayoutEntry>())
                 .Where(l => l != null && !string.IsNullOrEmpty(l.Key) && l.Col >= 0 && l.Row >= 0)
                 .ToList();
@@ -159,16 +164,47 @@ namespace WinPEBuilder.Launcher.Model
             return full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ? full : null;
         }
 
-        /// <summary>Programas do menu Iniciar agrupados por categoria (categorias e programas em ordem alfabética).</summary>
-        public static List<KeyValuePair<string, List<ProgramItem>>> GroupForStartMenu(IEnumerable<ProgramItem> programs)
+        public static string CategoryKey(string category)
         {
+            return "c:" + (string.IsNullOrWhiteSpace(category) ? DefaultCategory : category.Trim()).ToUpperInvariant();
+        }
+
+        /// <summary>
+        /// Programas do menu Iniciar agrupados por categoria. A ordem vem da lista escolhida a mao (chaves "c:CATEGORIA"
+        /// e "p:id"); o que nao estiver nela vem depois, em ordem alfabetica.
+        /// </summary>
+        public static List<KeyValuePair<string, List<ProgramItem>>> GroupForStartMenu(IEnumerable<ProgramItem> programs, IList<string> order = null)
+        {
+            var position = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (order != null)
+            {
+                for (var i = 0; i < order.Count; i++)
+                {
+                    if (!position.ContainsKey(order[i]))
+                    {
+                        position[order[i]] = i;
+                    }
+                }
+            }
+
+            Func<string, int> pos = key =>
+            {
+                int index;
+                return position.TryGetValue(key, out index) ? index : int.MaxValue;
+            };
+
             return programs
                 .Where(p => p.StartMenu)
-                .GroupBy(p => p.Category, StringComparer.CurrentCultureIgnoreCase)
-                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
-                .Select(g => new KeyValuePair<string, List<ProgramItem>>(
-                    g.Key,
-                    g.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList()))
+                .GroupBy(p => CategoryKey(p.Category))
+                .Select(g => new
+                {
+                    Key = g.Key,
+                    Name = string.IsNullOrWhiteSpace(g.First().Category) ? DefaultCategory : g.First().Category.Trim(),
+                    Items = g.OrderBy(p => pos(ProgramKey(p))).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+                })
+                .OrderBy(g => pos(g.Key))
+                .ThenBy(g => g.Name, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new KeyValuePair<string, List<ProgramItem>>(g.Name, g.Items))
                 .ToList();
         }
 

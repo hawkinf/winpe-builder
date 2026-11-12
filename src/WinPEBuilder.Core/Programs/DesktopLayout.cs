@@ -118,20 +118,58 @@ public static class DesktopLayoutHelper
         Math.Clamp((int)Math.Floor(y / CellSize), 0, Rows - 1));
 }
 
-/// <summary>Grupo do menu Iniciar (mesma regra do launcher: só quem marcou "menu Iniciar", por categoria, em ordem alfabética).</summary>
-public sealed record StartMenuGroup(string Category, IReadOnlyList<ProgramEntry> Programs);
+/// <summary>Grupo do menu Iniciar: categoria (nome como o usuário digitou na primeira ocorrência) e seus programas, já na ordem final.</summary>
+public sealed record StartMenuGroup(string Category, IReadOnlyList<ProgramEntry> Programs)
+{
+    public string Key => StartMenuModel.CategoryKey(Category);
+}
 
+/// <summary>
+/// Menu Iniciar: só quem marcou "menu Iniciar", agrupado por categoria. A ordem é a escolhida à mão (lista de chaves
+/// "c:CATEGORIA" e "p:id"); o que não estiver na lista vem depois, em ordem alfabética.
+/// </summary>
 public static class StartMenuModel
 {
-    public static IReadOnlyList<StartMenuGroup> Build(IReadOnlyList<ProgramEntry> programs)
+    public static string CategoryKey(string? category) =>
+        "c:" + (string.IsNullOrWhiteSpace(category) ? ProgramEntry.DefaultCategory : category.Trim()).ToUpperInvariant();
+
+    public static IReadOnlyList<StartMenuGroup> Build(IReadOnlyList<ProgramEntry> programs, IReadOnlyList<string>? order = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         var comparer = StringComparer.CurrentCultureIgnoreCase;
+        var position = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < (order?.Count ?? 0); i++)
+        {
+            position.TryAdd(order![i], i);
+        }
+
+        int Pos(string key) => position.TryGetValue(key, out var index) ? index : int.MaxValue;
+
         return programs
             .Where(p => p.ShowInStartMenu)
-            .GroupBy(p => string.IsNullOrWhiteSpace(p.Category) ? ProgramEntry.DefaultCategory : p.Category, comparer)
-            .OrderBy(g => g.Key, comparer)
-            .Select(g => new StartMenuGroup(g.Key, g.OrderBy(p => p.Name, comparer).ToList()))
+            .GroupBy(p => CategoryKey(p.Category))
+            .Select(g => new
+            {
+                Key = g.Key,
+                Name = string.IsNullOrWhiteSpace(g.First().Category) ? ProgramEntry.DefaultCategory : g.First().Category.Trim(),
+                Programs = g.OrderBy(p => Pos(DesktopLayoutHelper.ProgramKey(p))).ThenBy(p => p.Name, comparer).ToList(),
+            })
+            .OrderBy(g => Pos(g.Key))
+            .ThenBy(g => g.Name, comparer)
+            .Select(g => new StartMenuGroup(g.Name, g.Programs))
             .ToList();
+    }
+
+    /// <summary>Lista completa e explícita (todas as categorias e programas atuais, na ordem final) para gravar.</summary>
+    public static IReadOnlyList<string> Flatten(IReadOnlyList<StartMenuGroup> groups)
+    {
+        var list = new List<string>();
+        foreach (var group in groups)
+        {
+            list.Add(group.Key);
+            list.AddRange(group.Programs.Select(DesktopLayoutHelper.ProgramKey));
+        }
+
+        return list;
     }
 }

@@ -54,10 +54,13 @@ public partial class DesignerWindow : Window
 
     public IReadOnlyDictionary<string, DesktopSlot> Layout => _model.Layout;
 
-    public DesignerWindow(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout)
+    /// <summary>Ordem do menu Iniciar (lista completa), para gravar.</summary>
+    public IReadOnlyList<string> MenuOrder => _model.MenuOrder;
+
+    public DesignerWindow(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null)
     {
         InitializeComponent();
-        _model = new DesignerModel(programs, layout);
+        _model = new DesignerModel(programs, layout, menuOrder);
         _highlight = new Border
         {
             Width = Cell,
@@ -113,6 +116,7 @@ public partial class DesignerWindow : Window
 
         RefreshFolderPanel();
         RefreshList();
+        RefreshMenuTree();
         ApplySelection();
         EmptyHint.Visibility = _model.Programs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         DirtyText.Text = _model.Dirty ? "● Não gravado" : string.Empty;
@@ -818,6 +822,133 @@ public partial class DesignerWindow : Window
         _selectedKey = DesktopLayoutHelper.FolderKey(trimmed);
         _selectedId = null;
         Render();
+    }
+
+
+    // ==== ordem do menu Iniciar ===================================================================================
+
+    private const string MenuFormat = "wpb-menu";
+    private string? _menuSelectedKey;
+    private string? _menuDragKey;
+    private Point _menuDragStart;
+
+    private void RefreshMenuTree()
+    {
+        MenuTree.Items.Clear();
+        foreach (var group in _model.StartMenu)
+        {
+            var category = new TreeViewItem
+            {
+                Header = new TextBlock { Text = group.Category, FontWeight = FontWeights.SemiBold },
+                Tag = group.Key,
+                IsExpanded = true,
+            };
+            foreach (var program in group.Programs)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal };
+                row.Children.Add(new Image { Source = IconFor(program), Width = 16, Height = 16, Margin = new Thickness(0, 0, 6, 0) });
+                row.Children.Add(new TextBlock { Text = program.Name });
+                category.Items.Add(new TreeViewItem { Header = row, Tag = DesktopLayoutHelper.ProgramKey(program) });
+            }
+
+            MenuTree.Items.Add(category);
+        }
+
+        SelectMenuKey(_menuSelectedKey);
+    }
+
+    private void SelectMenuKey(string? key)
+    {
+        if (key is null)
+        {
+            return;
+        }
+
+        foreach (var category in MenuTree.Items.OfType<TreeViewItem>())
+        {
+            if ((string)category.Tag == key)
+            {
+                category.IsSelected = true;
+                return;
+            }
+
+            foreach (var child in category.Items.OfType<TreeViewItem>().Where(c => (string)c.Tag == key))
+            {
+                child.IsSelected = true;
+                return;
+            }
+        }
+    }
+
+    private void MenuTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
+        _menuSelectedKey = (e.NewValue as TreeViewItem)?.Tag as string ?? _menuSelectedKey;
+
+    private void MenuUp_Click(object sender, RoutedEventArgs e) => MoveMenuSelected(-1);
+
+    private void MenuDown_Click(object sender, RoutedEventArgs e) => MoveMenuSelected(+1);
+
+    private void MoveMenuSelected(int delta)
+    {
+        if (_menuSelectedKey is not null && _model.MoveMenuEntry(_menuSelectedKey, delta))
+        {
+            Render();
+        }
+    }
+
+    private static T? Ancestor<T>(DependencyObject? start) where T : DependencyObject
+    {
+        while (start is not null and not T)
+        {
+            start = start is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(start)
+                : LogicalTreeHelper.GetParent(start);
+        }
+
+        return start as T;
+    }
+
+    private void MenuTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _menuDragKey = Ancestor<TreeViewItem>(e.OriginalSource as DependencyObject)?.Tag as string;
+        _menuDragStart = e.GetPosition(MenuTree);
+    }
+
+    private void MenuTree_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_menuDragKey is null || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(MenuTree);
+        if (Math.Abs(pos.X - _menuDragStart.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(pos.Y - _menuDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        var key = _menuDragKey;
+        _menuDragKey = null;
+        DragDrop.DoDragDrop(MenuTree, new DataObject(MenuFormat, key), DragDropEffects.Move);
+    }
+
+    private void MenuTree_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(MenuFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void MenuTree_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(MenuFormat) is string source
+            && Ancestor<TreeViewItem>(e.OriginalSource as DependencyObject)?.Tag is string target
+            && _model.DropMenuEntry(source, target))
+        {
+            _menuSelectedKey = source;
+            Render();
+        }
+
+        e.Handled = true;
     }
 
     // ==== menu Iniciar (preview) =================================================================================

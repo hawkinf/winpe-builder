@@ -67,7 +67,9 @@
                    Text="Preview: nada é executado aqui. Arraste os ícones para mover (soltar sobre outro ícone troca de lugar; sobre uma pasta, coloca dentro). Duplo clique edita ou abre a pasta. Delete remove. Clique em Iniciar para ver o menu."/>
 
         <!-- ===== Painel de controle ===== -->
-        <DockPanel Grid.Row="0" Grid.Column="2">
+        <TabControl Grid.Row="0" Grid.Column="2">
+            <TabItem Header="Programas">
+        <DockPanel Margin="0,8,0,0">
             <StackPanel DockPanel.Dock="Top">
                 <TextBlock Text="Programas" FontWeight="SemiBold" Margin="0,0,0,6"/>
             </StackPanel>
@@ -92,6 +94,21 @@
                 </ListBox.ItemTemplate>
             </ListBox>
         </DockPanel>
+            </TabItem>
+            <TabItem Header="Menu Iniciar">
+                <DockPanel Margin="0,8,0,0">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="Gray" FontSize="11" Margin="0,0,0,6"
+                               Text="Arraste para reordenar. Soltar um programa sobre uma categoria muda a categoria dele. Ou use Subir/Descer."/>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Subir" Width="90" Margin="0,0,8,0" Click="MenuUp_Click"/>
+                        <Button Content="Descer" Width="90" Click="MenuDown_Click"/>
+                    </StackPanel>
+                    <TreeView x:Name="MenuTree" AllowDrop="True" PreviewMouseLeftButtonDown="MenuTree_PreviewMouseLeftButtonDown"
+                              PreviewMouseMove="MenuTree_PreviewMouseMove" DragOver="MenuTree_DragOver" Drop="MenuTree_Drop"
+                              SelectedItemChanged="MenuTree_SelectedItemChanged"/>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
 
         <!-- ===== Gravar / Descartar ===== -->
         <StackPanel Grid.Row="1" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">

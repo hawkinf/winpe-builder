@@ -48,6 +48,7 @@ namespace WinPEBuilder.Launcher
 
             var programs = new List<ProgramItem>();
             var layout = new List<LayoutEntry>();
+            var menuOrder = new List<string>();
             string notice = null;
             if (manifestPath == null || !File.Exists(manifestPath))
             {
@@ -61,6 +62,7 @@ namespace WinPEBuilder.Launcher
                     var manifest = ManifestReader.Load(manifestPath);
                     programs = manifest.Programs;
                     layout = manifest.Layout;
+                    menuOrder = manifest.MenuOrder;
                     AppLog.Write("Manifesto carregado: " + manifestPath + " (" + programs.Count + " programa(s))");
                 }
                 catch (Exception ex) when (ex is IOException || ex is InvalidDataException || ex is UnauthorizedAccessException)
@@ -71,7 +73,7 @@ namespace WinPEBuilder.Launcher
             }
 
             var runner = new ProgramRunner(filesRoot ?? string.Empty);
-            using (var desktop = new DesktopForm(runner, programs, layout, preview, notice))
+            using (var desktop = new DesktopForm(runner, programs, layout, menuOrder, preview, notice))
             {
                 Application.Run(desktop);
             }

@@ -19,6 +19,7 @@ namespace WinPEBuilder.Launcher
 
         private readonly ProgramRunner _runner;
         private readonly List<ProgramItem> _programs;
+        private readonly List<string> _menuOrder;
         private readonly bool _preview;
         private readonly Button _startButton;
         private readonly FlowLayoutPanel _tasksPanel;
@@ -27,10 +28,11 @@ namespace WinPEBuilder.Launcher
         private readonly ContextMenuStrip _menu;
         private readonly List<KeyValuePair<Process, Button>> _tasks = new List<KeyValuePair<Process, Button>>();
 
-        public TaskbarForm(ProgramRunner runner, List<ProgramItem> programs, bool preview)
+        public TaskbarForm(ProgramRunner runner, List<ProgramItem> programs, List<string> menuOrder, bool preview)
         {
             _runner = runner;
             _programs = programs;
+            _menuOrder = menuOrder;
             _preview = preview;
 
             FormBorderStyle = FormBorderStyle.None;
@@ -181,7 +183,7 @@ namespace WinPEBuilder.Launcher
         private void BuildMenu()
         {
             _menu.Items.Clear();
-            var groups = ManifestReader.GroupForStartMenu(_programs);
+            var groups = ManifestReader.GroupForStartMenu(_programs, _menuOrder);
 
             if (groups.Count == 0)
             {

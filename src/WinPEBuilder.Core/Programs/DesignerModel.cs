@@ -9,11 +9,13 @@ public sealed class DesignerModel
 {
     private readonly List<ProgramEntry> _programs;
     private Dictionary<string, DesktopSlot> _layout;
+    private List<string> _menuOrder;
 
-    public DesignerModel(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout)
+    public DesignerModel(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         _programs = [.. programs];
+        _menuOrder = [.. menuOrder ?? []];
         _layout = DesktopLayoutHelper.Normalize(DesktopLayoutHelper.Items(_programs), layout);
     }
 
@@ -27,7 +29,10 @@ public sealed class DesignerModel
 
     public IReadOnlyList<DesktopItem> Items => DesktopLayoutHelper.Items(_programs);
 
-    public IReadOnlyList<StartMenuGroup> StartMenu => StartMenuModel.Build(_programs);
+    public IReadOnlyList<StartMenuGroup> StartMenu => StartMenuModel.Build(_programs, _menuOrder);
+
+    /// <summary>Ordem completa e explicita do menu Iniciar (categorias e programas), pronta para gravar.</summary>
+    public IReadOnlyList<string> MenuOrder => StartMenuModel.Flatten(StartMenu);
 
     public ProgramEntry? Find(string id) => _programs.FirstOrDefault(p => string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
 
@@ -229,6 +234,147 @@ public sealed class DesignerModel
         }
 
         Refresh(null);
+        Dirty = true;
+    }
+
+    // ---- ordem do menu Iniciar ----
+
+    /// <summary>
+    /// Sobe (delta menor que 0) ou desce uma categoria ("c:...") ou um programa ("p:...") dentro dos seus irmaos
+    /// (programas so andam dentro da propria categoria). Devolve false se ja esta no limite ou a chave nao existe.
+    /// </summary>
+    public bool MoveMenuEntry(string key, int delta)
+    {
+        var groups = StartMenu.ToList();
+        if (key.StartsWith("c:", StringComparison.Ordinal))
+        {
+            var index = groups.FindIndex(g => g.Key == key);
+            var target = index + delta;
+            if (index < 0 || target < 0 || target >= groups.Count)
+            {
+                return false;
+            }
+
+            var moved = groups[index];
+            groups.RemoveAt(index);
+            groups.Insert(target, moved);
+            SetMenuOrder(groups);
+            return true;
+        }
+
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var programs = groups[g].Programs.ToList();
+            var index = programs.FindIndex(p => DesktopLayoutHelper.ProgramKey(p) == key);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            var target = index + delta;
+            if (target < 0 || target >= programs.Count)
+            {
+                return false;
+            }
+
+            var movedProgram = programs[index];
+            programs.RemoveAt(index);
+            programs.Insert(target, movedProgram);
+            groups[g] = groups[g] with { Programs = programs };
+            SetMenuOrder(groups);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Arrastar no menu: categoria sobre categoria = vai para antes dela; programa sobre categoria = muda para essa categoria
+    /// (no fim); programa sobre programa = vai para antes dele (mudando de categoria, se for outra).
+    /// </summary>
+    public bool DropMenuEntry(string sourceKey, string targetKey)
+    {
+        if (sourceKey == targetKey)
+        {
+            return false;
+        }
+
+        var groups = StartMenu.ToList();
+        if (sourceKey.StartsWith("c:", StringComparison.Ordinal))
+        {
+            var from = groups.FindIndex(g => g.Key == sourceKey);
+            var group = from < 0 ? null : groups[from];
+            var targetCategory = targetKey.StartsWith("c:", StringComparison.Ordinal)
+                ? targetKey
+                : groups.FirstOrDefault(g => g.Programs.Any(p => DesktopLayoutHelper.ProgramKey(p) == targetKey))?.Key;
+            if (group is null || targetCategory is null || targetCategory == sourceKey)
+            {
+                return false;
+            }
+
+            groups.RemoveAt(from);
+            groups.Insert(groups.FindIndex(g => g.Key == targetCategory), group);
+            SetMenuOrder(groups);
+            return true;
+        }
+
+        var program = _programs.FirstOrDefault(p => DesktopLayoutHelper.ProgramKey(p) == sourceKey && p.ShowInStartMenu);
+        if (program is null)
+        {
+            return false;
+        }
+
+        StartMenuGroup? targetGroup;
+        ProgramEntry? before = null;
+        if (targetKey.StartsWith("c:", StringComparison.Ordinal))
+        {
+            targetGroup = groups.FirstOrDefault(g => g.Key == targetKey);
+        }
+        else
+        {
+            targetGroup = groups.FirstOrDefault(g => g.Programs.Any(p => DesktopLayoutHelper.ProgramKey(p) == targetKey));
+            before = targetGroup?.Programs.First(p => DesktopLayoutHelper.ProgramKey(p) == targetKey);
+        }
+
+        if (targetGroup is null)
+        {
+            return false;
+        }
+
+        var moved = program;
+        if (targetGroup.Key != StartMenuModel.CategoryKey(program.Category))
+        {
+            moved = program with { Category = targetGroup.Category };
+            _programs[_programs.FindIndex(p => p.Id == program.Id)] = moved;
+        }
+
+        // reconstroi os grupos com o programa na posicao pedida (a origem sai do grupo antigo)
+        var rebuilt = StartMenuModel.Build(_programs, _menuOrder).ToList();
+        for (var i = 0; i < rebuilt.Count; i++)
+        {
+            rebuilt[i] = rebuilt[i] with { Programs = rebuilt[i].Programs.Where(p => p.Id != moved.Id).ToList() };
+        }
+
+        var dest = rebuilt.FindIndex(g => g.Key == targetGroup.Key);
+        if (dest < 0)
+        {
+            rebuilt.Add(new StartMenuGroup(targetGroup.Category, [moved]));
+        }
+        else
+        {
+            var list = rebuilt[dest].Programs.ToList();
+            var at = before is null ? list.Count : Math.Max(0, list.FindIndex(p => p.Id == before.Id));
+            list.Insert(at, moved);
+            rebuilt[dest] = rebuilt[dest] with { Programs = list };
+        }
+
+        SetMenuOrder(rebuilt.Where(g => g.Programs.Count > 0).ToList());
+        return true;
+    }
+
+    private void SetMenuOrder(IReadOnlyList<StartMenuGroup> groups)
+    {
+        _menuOrder = [.. StartMenuModel.Flatten(groups)];
         Dirty = true;
     }
 

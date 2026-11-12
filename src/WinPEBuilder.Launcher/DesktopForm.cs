@@ -17,10 +17,10 @@ namespace WinPEBuilder.Launcher
         private Rectangle _originalWorkArea;
         private readonly List<LayoutEntry> _layout;
 
-        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, bool preview, string notice)
+        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, List<string> menuOrder, bool preview, string notice)
         {
             _preview = preview;
-            _taskbar = new TaskbarForm(runner, programs, preview);
+            _taskbar = new TaskbarForm(runner, programs, menuOrder, preview);
 
             Text = "WinPE Launcher (teste)";
             Icon = SystemIcons.Application;

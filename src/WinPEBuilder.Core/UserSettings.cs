@@ -18,6 +18,7 @@ public sealed record UserSettings
     public string OutputIsoPath { get; init; } = string.Empty;
     public ProgramEntry[] Programs { get; init; } = [];
     public Dictionary<string, DesktopSlot> DesktopLayout { get; init; } = [];
+    public string[] StartMenuOrder { get; init; } = [];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

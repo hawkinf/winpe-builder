@@ -62,6 +62,9 @@ public sealed record BuildOptions
     /// <summary>Posição dos ícones na área de trabalho (editor visual). Vazio = o launcher arruma sozinho.</summary>
     public IReadOnlyDictionary<string, DesktopSlot> DesktopLayout { get; init; } = new Dictionary<string, DesktopSlot>();
 
+    /// <summary>Ordem do menu Iniciar escolhida a mao (chaves c:CATEGORIA e p:id). Vazio = alfabetica.</summary>
+    public IReadOnlyList<string> StartMenuOrder { get; init; } = [];
+
     /// <summary>
     /// Modo realmente usado: com programas e sem pasta de arquivos escolhida, os programas vão na ISO
     /// (não ocupam RAM); o usuário só controla o modo se escolheu um.
