@@ -99,15 +99,35 @@ Dados do app em `%LOCALAPPDATA%\WinPEBuilder` (`settings.json`, `logs\`, `downlo
 | `docs/` | `ARCHITECTURE.md` (mapa do código e armadilhas) e `STATUS.md` (estado, pendências, log) |
 | `scripts/`, `config/`, `tools/` | Utilitários e o antigo "WinPE Test Lab" (PhoenixPE/PEBakery; binários não são versionados) |
 
+## Testando numa máquina virtual
+
+A ISO foi testada no QEMU (BIOS e UEFI). Se ela **não inicia** na sua VM, quase sempre é a configuração da VM:
+
+| Sintoma | Causa provável e solução |
+|---|---|
+| Aparece o logo do Windows e a VM **reinicia sozinha** (em loop) | O CPU virtual não tem `POPCNT`/`SSE4.2`, exigidos pelo WinPE do Windows 11 24H2. Use um modelo de CPU moderno: no QEMU `-cpu max` (ou `host`); em outras VMs, desligue perfis de "compatibilidade" de CPU antigos e use uma versão de hardware virtual recente. |
+| Mensagem de memória / erro `0xc0000017` | Dê **pelo menos 1 GB** de RAM (testado; 2 GB é o recomendado). Em Hyper-V, desligue a memória dinâmica ou ponha o valor inicial em 2048 MB. |
+| Hyper-V geração 2 não inicia / "The image's hash is not allowed" | Os arquivos de boot são assinados pela *Microsoft Windows Production PCA 2011*. Em *Configurações > Segurança*, use o modelo **Microsoft Windows** (não o "Microsoft UEFI Certificate Authority") ou desligue o Secure Boot. Geração 1 (BIOS) também funciona. |
+| Não encontra mídia / vai direto ao shell do firmware | Confira se a ISO está conectada como DVD/CD e se ele é o primeiro dispositivo de boot; em VirtualBox/VMware, ative EFI só se for testar UEFI. |
+
+Exemplo de teste rápido no QEMU (BIOS):
+
+```powershell
+& "C:\Program Files\qemu\qemu-system-x86_64.exe" -m 2048 -smp 2 -cpu max -machine q35 -cdrom WinPE_amd64.iso -boot d
+```
+
+Para UEFI, acrescente `-drive if=pflash,format=raw,readonly=on,file="C:\Program Files\qemu\share\edk2-x86_64-code.fd"`.
+
 ## Estado e limitações (seja o primeiro a testar)
 
-O projeto foi desenvolvido com testes automatizados e verificação visual, mas **ainda não** foi validado de ponta a ponta numa máquina real:
+O projeto foi desenvolvido com testes automatizados e verificação visual, e já gerou e iniciou uma ISO real em VM (QEMU). Ainda falta validar:
 
 | Verificado | Ainda não verificado |
 |---|---|
-| 230 testes com runner simulado (pipeline de build, manifesto, editor, launcher) | Geração completa pela interface (copype + DISM) com administrador |
-| `oscdimg` real sobre a mídia do ADK (ISO com boot BIOS + UEFI conferido) | Boot da ISO numa VM e o launcher dentro de um WinPE real |
-| Interface, editor e launcher (`--preview`) vistos rodando no Windows | Gravação em pendrive (formata o disco) e instalação do ADK 2004 / WinPE x86 |
+| 230 testes com runner simulado (pipeline de build, manifesto, editor, launcher) | Gravação em pendrive (formata o disco) |
+| **Geração real pela interface** (copype + DISM + pacotes + `oscdimg`, 10 etapas): ISO de ~670 MB com boot BIOS + UEFI | Instalação do ADK 2004 e WinPE x86 (32 bits) |
+| **ISO iniciando no QEMU, em BIOS e em UEFI** (sem Secure Boot), até o desktop, com o launcher rodando dentro do WinPE de verdade (ícones, barra, relógio); funciona com 1 GB de RAM | Boot em hardware real e em Hyper-V, VirtualBox e VMware |
+| Interface, editor e launcher (`--preview`) vistos rodando no Windows | Papel de parede, subpastas e ordem do menu dentro do WinPE real |
 
 Relate problemas com o log em `%LOCALAPPDATA%\WinPEBuilder\logs` (e, dentro do WinPE, `X:\Windows\Temp\WinPELauncher.log`).
 
