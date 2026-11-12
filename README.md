@@ -20,6 +20,17 @@ com os arquivos que você quiser dentro, acessíveis no WinPE. Ele também baixa
 - Ao iniciar, o WinPE mapeia a pasta como unidade **`Z:`** e define a variável **`%ARQUIVOS%`**.
 - Se existir `startup.cmd` na pasta, ele é executado automaticamente.
 
+## Programas com ícone (desktop e menu Iniciar)
+No grupo **6. Programas no WinPE** clique em *Adicionar…*, escolha o `.exe`, o nome, a **categoria** (vira um submenu no Iniciar) e onde
+aparece (área de trabalho e/ou menu Iniciar). Os programas são copiados para `\Arquivos\Programas\<id>` na mídia (não usam RAM; com
+"copiar a pasta inteira" os arquivos vizinhos vão junto, necessário para programas portáteis).
+- Dentro do WinPE roda o **WinPE Launcher** (`WinPELauncher.exe`, WinForms/.NET Framework 4.8): ícones extraídos dos próprios `.exe`,
+  barra de tarefas com os programas abertos e relógio, menu **Iniciar** por categoria, Prompt de comando, PowerShell, Reiniciar e Desligar.
+- O launcher precisa do pacote **.NET Framework** do WinPE: é adicionado sozinho e só existe com a origem **ADK**. Com a origem
+  *boot.wim de uma ISO* os programas são copiados (em `Z:\Programas`) mas o desktop/menu não aparecem.
+- Testar o launcher no Windows comum: `WinPELauncher.exe --preview --manifest "C:\...\Arquivos\programs.json"` (janela normal; não desliga nada).
+- Se o launcher falhar dentro do WinPE, o `startnet.cmd` continua e você tem o prompt de comando; o log fica em `X:\Windows\Temp\WinPELauncher.log`.
+
 ## 32 bits (x86)
 A Microsoft removeu o WinPE x86 do ADK moderno. A última versão com ele é o **ADK do Windows 10 2004**; o app instala esse ADK
 numa pasta própria (`%LOCALAPPDATA%\WinPEBuilder\adk`). Alternativa: usar a origem *boot.wim de uma ISO* com uma ISO do Windows 32 bits.
@@ -34,6 +45,6 @@ Executável: `src/WinPEBuilder.App/bin/Debug/net10.0-windows/WinPEBuilder.exe` (
 (`settings.json`, `logs\`, `downloads\`, `work\`, `adk\`). Mapa do código: `docs/ARCHITECTURE.md`. Estado e pendências: `docs/STATUS.md`.
 
 ## Estrutura
-- `src/` – solução C# (Core = lógica, App = GUI WPF, Tests = xUnit)
+- `src/` – solução C# (Core = lógica, App = GUI WPF, Launcher = desktop/menu que roda no WinPE (net48), Tests = xUnit)
 - `scripts/` – PowerShell do Test Lab (UIA/PEBakery), `check-handoff.ps1` e `make-icon.ps1` (gera o ícone do app)
 - `config/`, `tools/`, `build/`, `output/` – Test Lab (binários ignorados pelo git)

@@ -4,7 +4,7 @@
 > ("Estado atual", "Pendências" e uma linha no "Log") **no mesmo commit** da mudança. Veja `AGENTS.md`.
 > Se o estado aqui divergir do código, o código vale — corrija este arquivo.
 
-Última atualização: 2026-11-11 (Claude Code).
+Última atualização: 2026-11-12 (Claude Code).
 
 ## Objetivo
 Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), injeta arquivos do usuário e gera a ISO.
@@ -21,7 +21,9 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 | WinPEBuilder: ISO (`BootFiles` + oscdimg) e gravação em pendrive (`UsbMediaWriter`) | ✅ | passo 6; 48 testes ok; oscdimg REAL validado (ISO com El Torito BIOS+UEFI); pendrive (MakeWinPEMedia /UFD, formata!) NÃO testado |
 | WinPEBuilder: ícone + propriedades do arquivo (`app.ico`, `scripts/make-icon.ps1`) | ✅ | 1.0.0, Hawk Informática; ícone no .exe e nas janelas |
 | Programas no WinPE — passo A1: modelo + manifesto + cópia no build (`Core/Programs`) | ✅ | 74 testes ok; ainda SEM tela no app e SEM launcher |
-| Programas no WinPE — A2 tela "Programas", A3 launcher (WinForms net48), A4 injeção na imagem | ⏳ | opção A escolhida pelo usuário |
+| Programas no WinPE — A2 tela "Programas" (ProgramWindow + grupo 6, persistência em settings.json) | ✅ | janela renderizada e conferida por captura; fluxo clicar-adicionar não automatizado |
+| Programas no WinPE — A3 launcher (`src/WinPEBuilder.Launcher`, WinForms net48: desktop, barra, Iniciar por categoria) | ✅ | testado no Windows comum com `--preview` (ícones extraídos OK); DENTRO do WinPE real NÃO testado |
+| Programas no WinPE — A4 injeção (exe em System32, WinPE-NetFx automático, startnet inicia o launcher) | ✅ | 101 testes ok com runner simulado; boot real NÃO testado |
 | WinPEBuilder: GUI completa (config, build, log em arquivo, cancelar, pendrive com confirmação digitada, settings.json) | ✅ | passo 7; 52 testes ok; janela abre e renderiza (screenshot), fechar grava settings; fluxo de geração real via GUI NÃO exercitado (exige admin) |
 
 Legenda: ✅ pronto · 🔄 em andamento · ⏳ não iniciado · ⚠️ com problema.
@@ -37,8 +39,8 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 - Definir fonte do WinPE x86 (ADK antigo com x86, ou boot.wim de ISO Windows 32-bit) — responsável: dono do projeto
 - Executar o app elevado e gerar uma ISO x64 de verdade (copype+DISM+oscdimg) e iniciá-la numa VM — responsável: dono do projeto
 - Testar 32 bits: instalação do ADK 2004 em pasta privada e/ou origem boot.wim de ISO x86 — responsável: dono do projeto
-- Programas no WinPE (opção A): A2 tela no app → A3 launcher WinForms net48 (desktop de ícones + barra + menu Iniciar; lê Arquivos\programs.json) → A4 injetar o launcher + exigir WinPE-NetFx + iniciar no startnet.cmd — qualquer IA
-- Launcher só foi planejado: WinForms em WinPE exige o pacote WinPE-NetFx (origem ADK) e nunca foi testado dentro de um WinPE real — validar em VM
+- Validar numa VM: gerar ISO x64 com programas, conferir se o launcher sobe no WinPE (WinForms depende de WinPE-NetFx; fontes/ícones podem variar), clicar nos programas e Reiniciar/Desligar — responsável: dono do projeto
+- Launcher: se o WinForms não subir no WinPE real, plano B = trocar por HTA/PowerShell ou usar winpeshl.ini; o log fica em X:\Windows\Temp\WinPELauncher.log
 - Ideias futuras: injeção de drivers, vários idiomas, publicar binário (self-contained), dedupe quando 2 programas vêm da mesma pasta — qualquer IA
 - Gravação em pendrive nunca foi executada de verdade (formata o disco): testar primeiro com um pendrive vazio — responsável: dono do projeto
 - Validar uma geração REAL (x64 via ADK) com o app elevado; só foi testado com runner simulado — responsável: dono do projeto
@@ -51,6 +53,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-12 — Claude Code — passos A2+A3+A4 (programas com ícone): tela Programas (ProgramWindow, UserSettings.Programs), projeto Launcher net48 (desktop/barra/Iniciar), injeção na imagem (BuildOptions.InstallLauncher/EffectiveComponents, StartnetScript launcher, CopyLauncher no App). Validar: dotnet test src/WinPEBuilder.sln (101 ok) e `WinPELauncher.exe --preview --manifest <programs.json>`.
 - 2026-11-11 — Claude Code — correção de docs: barras invertidas perdidas em linhas do STATUS (passo 5 e A1/A2–A4).
 - 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ Arquivos\Programas\{id} e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).
 - 2026-11-11 — Claude Code — ícone do app (scripts/make-icon.ps1 gera app.ico 16..256), ApplicationIcon + metadados de versão no csproj, Icon nas janelas. Validar: dotnet build; Propriedades > Detalhes do WinPEBuilder.exe.

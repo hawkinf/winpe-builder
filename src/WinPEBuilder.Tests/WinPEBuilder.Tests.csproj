@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Modelo do launcher (net48) compilado também aqui para testar o contrato programs.json de ponta a ponta. -->
+    <Compile Include="..\WinPEBuilder.Launcher\Model\LauncherManifest.cs" Link="Launcher\LauncherManifest.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\WinPEBuilder.Core\WinPEBuilder.Core.csproj" />
   </ItemGroup>
 

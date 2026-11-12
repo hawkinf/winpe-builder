@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Launcher que roda DENTRO do WinPE: área de trabalho com ícones + barra de tarefas + menu Iniciar.
+    .NET Framework 4.8 de propósito: o WinPE só tem .NET Framework (pacote WinPE-NetFx), não o .NET moderno.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>WinPELauncher</AssemblyName>
+    <RootNamespace>WinPEBuilder.Launcher</RootNamespace>
+    <ApplicationIcon>..\WinPEBuilder.App\app.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+    <Product>WinPE Builder Launcher</Product>
+    <AssemblyTitle>WinPE Launcher</AssemblyTitle>
+    <Description>Área de trabalho e menu Iniciar para o WinPE gerado pelo WinPE Builder.</Description>
+    <Company>Hawk Informática</Company>
+    <Copyright>© 2026 Hawk Informática</Copyright>
+    <SatelliteResourceLanguages>pt-BR</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+</Project>

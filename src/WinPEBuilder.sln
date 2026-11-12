@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinPEBuilder.App", "WinPEBu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinPEBuilder.Tests", "WinPEBuilder.Tests\WinPEBuilder.Tests.csproj", "{036F7720-CAE2-4D79-B918-C8C33D91582A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinPEBuilder.Launcher", "WinPEBuilder.Launcher\WinPEBuilder.Launcher.csproj", "{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{036F7720-CAE2-4D79-B918-C8C33D91582A}.Release|x64.Build.0 = Release|Any CPU
 		{036F7720-CAE2-4D79-B918-C8C33D91582A}.Release|x86.ActiveCfg = Release|Any CPU
 		{036F7720-CAE2-4D79-B918-C8C33D91582A}.Release|x86.Build.0 = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|x64.Build.0 = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Debug|x86.Build.0 = Debug|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|x64.ActiveCfg = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|x64.Build.0 = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|x86.ActiveCfg = Release|Any CPU
+		{89405A14-67C3-43B8-A4DE-ADFC5EB91DE5}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

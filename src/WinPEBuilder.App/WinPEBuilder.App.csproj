@@ -29,6 +29,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- O launcher (net48) é compilado junto e copiado para launcher\ ao lado do .exe; vai para dentro do WinPE. -->
+    <ProjectReference Include="..\WinPEBuilder.Launcher\WinPEBuilder.Launcher.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+
+  <Target Name="CopyLauncher" AfterTargets="Build">
+    <PropertyGroup>
+      <LauncherBuilt>$(MSBuildThisFileDirectory)..\WinPEBuilder.Launcher\bin\$(Configuration)\net48\WinPELauncher.exe</LauncherBuilt>
+    </PropertyGroup>
+    <Copy SourceFiles="$(LauncherBuilt)" DestinationFolder="$(OutDir)launcher" Condition="Exists('$(LauncherBuilt)')" />
+    <Warning Condition="!Exists('$(LauncherBuilt)')" Text="WinPELauncher.exe não encontrado em $(LauncherBuilt)" />
+  </Target>
+
+  <ItemGroup>
     <!-- Mesmo ícone embutido como recurso para a janela (Icon="app.ico" no XAML) -->
     <Resource Include="app.ico" />
   </ItemGroup>

@@ -9,6 +9,7 @@ using WinPEBuilder.Core;
 using WinPEBuilder.Core.Adk;
 using WinPEBuilder.Core.Build;
 using WinPEBuilder.Core.Processes;
+using WinPEBuilder.Core.Programs;
 
 namespace WinPEBuilder.App;
 
@@ -23,6 +24,8 @@ public partial class MainWindow : Window
     private readonly string _settingsPath;
     private readonly bool _ready;
 
+    private List<ProgramEntry> _programs = [];
+    private int _summaryVersion;
     private CancellationTokenSource? _cts;
     private LogFile? _logFile;
     private AdkStatus _status = new(null, null, null);
@@ -46,6 +49,9 @@ public partial class MainWindow : Window
     private WinPeArchitecture SelectedArchitecture => ArchX86Radio.IsChecked == true ? WinPeArchitecture.X86 : WinPeArchitecture.X64;
 
     private WinPeSourceKind SelectedSource => SourceIsoRadio.IsChecked == true ? WinPeSourceKind.BootWimFromIso : WinPeSourceKind.Adk;
+
+    /// <summary>Launcher compilado junto com o app (pasta launcher ao lado do .exe).</summary>
+    private static string LauncherPath => Path.Combine(AppContext.BaseDirectory, "launcher", StartnetScript.LauncherFileName);
 
     private string DefaultOutputPath(WinPeArchitecture arch) => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WinPEBuilder", $"WinPE_{arch.ToAdkName()}.iso");
@@ -104,6 +110,8 @@ public partial class MainWindow : Window
         LabelBox.Text = s.VolumeLabel;
         FilesFolderBox.Text = s.FilesFolder;
         (s.FilesMode == FilesMode.InsideImage ? FilesInsideRadio : FilesOnIsoRadio).IsChecked = true;
+        _programs = [.. s.Programs];
+        RefreshPrograms();
         _lastOutputDefault = DefaultOutputPath(s.Architecture);
         OutputBox.Text = string.IsNullOrWhiteSpace(s.OutputIsoPath) ? _lastOutputDefault : s.OutputIsoPath;
     }
@@ -119,6 +127,7 @@ public partial class MainWindow : Window
         FilesFolder = FilesFolderBox.Text.Trim(),
         FilesMode = FilesInsideRadio.IsChecked == true ? FilesMode.InsideImage : FilesMode.OnIso,
         OutputIsoPath = OutputBox.Text.Trim(),
+        Programs = [.. _programs],
     };
 
     /// <summary>Monta as opções de geração a partir da tela; null (com mensagem) se algo estiver inválido.</summary>
@@ -140,6 +149,8 @@ public partial class MainWindow : Window
                 VolumeLabel = s.VolumeLabel,
                 FilesFolder = string.IsNullOrEmpty(s.FilesFolder) ? null : Path.GetFullPath(s.FilesFolder),
                 FilesMode = string.IsNullOrEmpty(s.FilesFolder) ? FilesMode.None : s.FilesMode,
+                Programs = s.Programs,
+                LauncherExePath = LauncherPath,
             };
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
@@ -217,6 +228,144 @@ public partial class MainWindow : Window
         else
         {
             SourceHint.Text = "WinPE add-on encontrado: pronto para gerar.";
+        }
+
+        UpdateProgramsHint();
+    }
+
+    // ---- programas (desktop / menu Iniciar) -----------------------------------------------------------
+
+    private sealed record ProgramRow(string Name, string Category, string Where, string File);
+
+    private static string DescribeWhere(ProgramEntry p) => (p.ShowOnDesktop, p.ShowInStartMenu) switch
+    {
+        (true, true) => "Desktop + Iniciar",
+        (true, false) => "Desktop",
+        _ => "Menu Iniciar",
+    };
+
+    private void RefreshPrograms(int selectIndex = -1)
+    {
+        ProgramsList.ItemsSource = _programs
+            .Select(p => new ProgramRow(p.Name, p.Category, DescribeWhere(p),
+                File.Exists(p.SourceExe) ? p.SourceExe : "✖ não encontrado: " + p.SourceExe))
+            .ToList();
+        if (selectIndex >= 0 && selectIndex < _programs.Count)
+        {
+            ProgramsList.SelectedIndex = selectIndex;
+        }
+
+        UpdateProgramsHint();
+        UpdateProgramsSummary();
+    }
+
+    private void UpdateProgramsHint()
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        if (_programs.Count == 0)
+        {
+            ProgramsHint.Text = "Adicione programas para que apareçam com ícone na área de trabalho e no menu Iniciar do WinPE.";
+            ProgramsHint.Foreground = System.Windows.Media.Brushes.Gray;
+        }
+        else if (SelectedSource == WinPeSourceKind.BootWimFromIso)
+        {
+            ProgramsHint.Text = "⚠ Com a origem \"boot.wim de uma ISO\" não há .NET no WinPE: os programas serão copiados (unidade Z:, pasta Programas), "
+                + "mas o desktop e o menu Iniciar NÃO aparecem. Use a origem ADK.";
+            ProgramsHint.Foreground = System.Windows.Media.Brushes.DarkOrange;
+        }
+        else
+        {
+            ProgramsHint.Text = "O launcher (desktop + menu Iniciar) é instalado automaticamente e o pacote .NET Framework é adicionado sozinho.";
+            ProgramsHint.Foreground = System.Windows.Media.Brushes.DarkGreen;
+        }
+    }
+
+    private async void UpdateProgramsSummary()
+    {
+        var version = ++_summaryVersion;
+        var snapshot = _programs.ToList();
+        if (snapshot.Count == 0)
+        {
+            ProgramsSummary.Text = string.Empty;
+            return;
+        }
+
+        ProgramsSummary.Text = "Calculando tamanho…";
+        string text;
+        try
+        {
+            var bytes = await Task.Run(() => ProgramStaging.TotalBytes(snapshot));
+            text = $"{snapshot.Count} programa(s), {bytes / (1024.0 * 1024):0.#} MB a copiar para a mídia.";
+            if (bytes > 2L * 1024 * 1024 * 1024)
+            {
+                text += " ⚠ Grande: a ISO vai crescer bastante.";
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            text = $"{snapshot.Count} programa(s). Não foi possível medir o tamanho (algum arquivo sumiu?).";
+        }
+
+        if (version == _summaryVersion)
+        {
+            ProgramsSummary.Text = text;
+        }
+    }
+
+    private void ProgramsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = ProgramsList.SelectedIndex >= 0;
+        ProgramEditButton.IsEnabled = selected;
+        ProgramRemoveButton.IsEnabled = selected;
+    }
+
+    private void ProgramAddButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ProgramWindow(null, _programs.Select(p => p.Category), _programs.Select(p => p.Id)) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is not null)
+        {
+            _programs.Add(dialog.Result);
+            RefreshPrograms(_programs.Count - 1);
+        }
+    }
+
+    private void ProgramEditButton_Click(object sender, RoutedEventArgs e) => EditSelectedProgram();
+
+    private void ProgramsList_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ProgramsList.SelectedIndex >= 0)
+        {
+            EditSelectedProgram();
+        }
+    }
+
+    private void EditSelectedProgram()
+    {
+        var index = ProgramsList.SelectedIndex;
+        if (index < 0)
+        {
+            return;
+        }
+
+        var dialog = new ProgramWindow(_programs[index], _programs.Select(p => p.Category), _programs.Select(p => p.Id)) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is not null)
+        {
+            _programs[index] = dialog.Result;
+            RefreshPrograms(index);
+        }
+    }
+
+    private void ProgramRemoveButton_Click(object sender, RoutedEventArgs e)
+    {
+        var index = ProgramsList.SelectedIndex;
+        if (index >= 0)
+        {
+            _programs.RemoveAt(index);
+            RefreshPrograms(Math.Min(index, _programs.Count - 1));
         }
     }
 

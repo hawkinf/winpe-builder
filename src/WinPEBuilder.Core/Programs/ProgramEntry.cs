@@ -36,6 +36,7 @@ public sealed record ProgramEntry
     private static readonly Regex IdPattern = new("^[a-z0-9][a-z0-9-]{0,40}$", RegexOptions.CultureInvariant);
 
     /// <summary>Pasta de origem que será copiada.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public string SourceFolder => Path.GetDirectoryName(Path.GetFullPath(SourceExe))!;
 
     /// <summary>Gera um id único a partir do nome ("HWiNFO 64" → "hwinfo-64").</summary>

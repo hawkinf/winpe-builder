@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WinPEBuilder.Core.Build;
+using WinPEBuilder.Core.Programs;
 
 namespace WinPEBuilder.Core;
 
@@ -15,6 +16,7 @@ public sealed record UserSettings
     public string FilesFolder { get; init; } = string.Empty;
     public FilesMode FilesMode { get; init; } = FilesMode.OnIso;
     public string OutputIsoPath { get; init; } = string.Empty;
+    public ProgramEntry[] Programs { get; init; } = [];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

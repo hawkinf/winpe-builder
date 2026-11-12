@@ -65,6 +65,22 @@ public sealed record BuildOptions
     /// </summary>
     public FilesMode EffectiveFilesMode => FilesMode == FilesMode.None && Programs.Count > 0 ? FilesMode.OnIso : FilesMode;
 
+    /// <summary>
+    /// Caminho do WinPELauncher.exe (área de trabalho + menu Iniciar dentro do WinPE). Quando informado, há programas
+    /// e a origem é o ADK, o launcher é instalado na imagem (e o pacote .NET é adicionado sozinho).
+    /// </summary>
+    public string? LauncherExePath { get; init; }
+
+    /// <summary>O launcher só roda com .NET Framework (pacote WinPE-NetFx), que só existe na origem ADK.</summary>
+    public bool InstallLauncher =>
+        Programs.Count > 0 && Source == WinPeSourceKind.Adk && !string.IsNullOrWhiteSpace(LauncherExePath);
+
+    /// <summary>Pacotes realmente adicionados: os escolhidos mais o .NET quando o launcher será instalado.</summary>
+    public IReadOnlyList<string> EffectiveComponents =>
+        InstallLauncher && !OptionalComponents.Contains("WinPE-NetFx", StringComparer.OrdinalIgnoreCase)
+            ? [.. OptionalComponents, "WinPE-NetFx"]
+            : OptionalComponents;
+
     /// <summary>Inicia direto, sem o "Pressione qualquer tecla para iniciar do CD" no UEFI.</summary>
     public bool BootWithoutPrompt { get; init; } = true;
 
@@ -92,6 +108,11 @@ public sealed record BuildOptions
         }
 
         errors.AddRange(ProgramEntry.Validate(Programs));
+
+        if (InstallLauncher && !File.Exists(LauncherExePath))
+        {
+            errors.Add("O launcher (WinPELauncher.exe) não foi encontrado ao lado do aplicativo. Reinstale ou recompile o WinPE Builder.");
+        }
 
         if (string.IsNullOrWhiteSpace(OutputIsoPath) || !OutputIsoPath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
         {

@@ -112,6 +112,12 @@ public sealed class WinPeBuildService(
             new("Preparando a pasta de trabalho", () => PrepareWorkDirectoryAsync(run)),
         };
 
+        if (o.Programs.Count > 0 && o.Source != WinPeSourceKind.Adk)
+        {
+            run.Log("Aviso: com a origem \"boot.wim de uma ISO\" não há .NET no WinPE, então o launcher (área de trabalho/menu Iniciar) "
+                + $"não será instalado. Os programas ficam em %ARQUIVOS%\\{ProgramStaging.ProgramsFolderName} (unidade {StartnetScript.DriveLetter}:).");
+        }
+
         if (o.Source == WinPeSourceKind.Adk)
         {
             steps.Add(new("Criando a base do WinPE (copype)", () => CopypeAsync(run)));
@@ -123,7 +129,7 @@ public sealed class WinPeBuildService(
 
         steps.Add(new("Montando o boot.wim", () => MountAsync(run)));
 
-        if (o.OptionalComponents.Count > 0)
+        if (o.EffectiveComponents.Count > 0)
         {
             steps.Add(new("Adicionando pacotes opcionais", () => AddPackagesAsync(run)));
         }
@@ -133,6 +139,11 @@ public sealed class WinPeBuildService(
         if (o.EffectiveFilesMode != FilesMode.None)
         {
             steps.Add(new("Criando o script de inicialização (startnet.cmd)", () => WriteStartnetAsync(run)));
+        }
+
+        if (o.InstallLauncher)
+        {
+            steps.Add(new("Instalando o launcher (área de trabalho e menu Iniciar)", () => InstallLauncherAsync(run)));
         }
 
         if (o.EffectiveFilesMode == FilesMode.InsideImage)
@@ -262,7 +273,7 @@ public sealed class WinPeBuildService(
 
     private async Task AddPackagesAsync(BuildRun run)
     {
-        var components = OptionalComponents.Resolve(run.Options.OptionalComponents);
+        var components = OptionalComponents.Resolve(run.Options.EffectiveComponents);
         var ocs = run.Kit.OptionalComponentsDirectory(run.Options.Architecture);
         foreach (var component in components)
         {
@@ -352,9 +363,18 @@ public sealed class WinPeBuildService(
     {
         var system32 = Path.Combine(run.Layout.Mount, "Windows", "System32");
         Directory.CreateDirectory(system32);
-        var script = StartnetScript.Build(run.Options.EffectiveFilesMode);
+        var script = StartnetScript.Build(run.Options.EffectiveFilesMode, run.Options.InstallLauncher);
         await File.WriteAllBytesAsync(Path.Combine(system32, "startnet.cmd"), StartnetScript.ToBytes(script), run.Ct).ConfigureAwait(false);
         run.Log($"startnet.cmd gravado. No WinPE a pasta fica em %ARQUIVOS% e na unidade {StartnetScript.DriveLetter}: ({StartnetScript.DriveLetter}:\\startup.cmd, se existir, roda sozinho).");
+    }
+
+    private static async Task InstallLauncherAsync(BuildRun run)
+    {
+        var system32 = Path.Combine(run.Layout.Mount, "Windows", "System32");
+        Directory.CreateDirectory(system32);
+        var target = Path.Combine(system32, StartnetScript.LauncherFileName);
+        await Task.Run(() => File.Copy(run.Options.LauncherExePath!, target, overwrite: true), run.Ct).ConfigureAwait(false);
+        run.Log($"Launcher instalado em X:\\Windows\\System32\\{StartnetScript.LauncherFileName} (inicia pelo startnet.cmd; requer o pacote .NET, adicionado automaticamente).");
     }
 
     /// <summary>Copia a pasta de arquivos do usuário e os programas (com programs.json) para <paramref name="destination"/>.</summary>

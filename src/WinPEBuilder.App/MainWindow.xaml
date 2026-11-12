@@ -114,7 +114,30 @@
                     </StackPanel>
                 </GroupBox>
 
-                <GroupBox Header="6. ISO de saída">
+                <GroupBox Header="6. Programas no WinPE (desktop e menu Iniciar)">
+                    <StackPanel>
+                        <ListView x:Name="ProgramsList" Height="130" SelectionMode="Single" MouseDoubleClick="ProgramsList_DoubleClick"
+                                  SelectionChanged="ProgramsList_SelectionChanged">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Nome" Width="120" DisplayMemberBinding="{Binding Name}"/>
+                                    <GridViewColumn Header="Categoria" Width="90" DisplayMemberBinding="{Binding Category}"/>
+                                    <GridViewColumn Header="Aparece em" Width="110" DisplayMemberBinding="{Binding Where}"/>
+                                    <GridViewColumn Header="Arquivo" Width="170" DisplayMemberBinding="{Binding File}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button x:Name="ProgramAddButton" Content="Adicionar…" Click="ProgramAddButton_Click"/>
+                            <Button x:Name="ProgramEditButton" Content="Editar…" IsEnabled="False" Click="ProgramEditButton_Click"/>
+                            <Button x:Name="ProgramRemoveButton" Content="Remover" IsEnabled="False" Click="ProgramRemoveButton_Click"/>
+                        </WrapPanel>
+                        <TextBlock x:Name="ProgramsSummary" TextWrapping="Wrap" Foreground="Gray"/>
+                        <TextBlock x:Name="ProgramsHint" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="7. ISO de saída">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
