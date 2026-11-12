@@ -40,8 +40,8 @@
                  ToolTip="Opcional"/>
 
         <TextBlock Grid.Row="4" Text="Pasta no desktop:" VerticalAlignment="Center" Margin="0,0,10,8"/>
-        <TextBox x:Name="DesktopFolderBox" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,8" MaxLength="40" VerticalContentAlignment="Center"
-                 ToolTip="Opcional: nome de uma pasta na área de trabalho que abre uma janela com os programas de mesmo nome"/>
+        <TextBox x:Name="DesktopFolderBox" Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,0,0,8" MaxLength="120" VerticalContentAlignment="Center"
+                 ToolTip="Opcional: nome de uma pasta na área de trabalho que abre uma janela com os programas dela. Use / para subpastas (ex.: Ferramentas/Discos)."/>
 
         <CheckBox x:Name="DesktopCheck" Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="2" Content="Mostrar na área de trabalho" IsChecked="True" Margin="0,0,0,4"/>
         <CheckBox x:Name="StartMenuCheck" Grid.Row="6" Grid.Column="1" Grid.ColumnSpan="2" Content="Mostrar no menu Iniciar" IsChecked="True" Margin="0,0,0,4"/>

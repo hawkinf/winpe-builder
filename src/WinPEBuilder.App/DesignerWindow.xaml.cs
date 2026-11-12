@@ -31,7 +31,11 @@ public partial class DesignerWindow : Window
 
     private string? _selectedKey;   // ícone selecionado na área de trabalho
     private string? _selectedId;    // programa selecionado (lista, ícone ou janela da pasta)
-    private string? _openFolderKey;
+    private string? _openFolderPath;  // pasta aberta na janela (caminho completo, qualquer nivel)
+    private string? _selectedSubKey;  // subpasta selecionada dentro da janela da pasta
+    private const string FolderFormat = "wpb-folder";
+    private const string UpKey = "<up>";
+    private string? _pendingDragFolderKey;
     private bool _suppressListEvents;
     private bool _finishing;
 
@@ -99,9 +103,17 @@ public partial class DesignerWindow : Window
 
         DesktopCanvas.Children.Add(_highlight);
 
-        if (_openFolderKey is not null && _model.FindItem(_openFolderKey) is not { IsFolder: true })
+        if (_openFolderPath is not null && !_model.FolderPaths.Any(p => FolderPath.Same(p, _openFolderPath)))
         {
-            _openFolderKey = null; // a pasta deixou de existir
+            // a pasta aberta deixou de existir: sobe ate a mais proxima que ainda existe
+            var candidate = FolderPath.Parent(_openFolderPath);
+            while (candidate.Length > 0 && !_model.FolderPaths.Any(p => FolderPath.Same(p, candidate)))
+            {
+                candidate = FolderPath.Parent(candidate);
+            }
+
+            _openFolderPath = candidate.Length == 0 ? null : candidate;
+            _selectedSubKey = null;
         }
 
         if (_selectedKey is not null && _model.FindItem(_selectedKey) is null)
@@ -182,7 +194,7 @@ public partial class DesignerWindow : Window
             icon.BorderBrush = selected ? new SolidColorBrush(Color.FromRgb(0x66, 0xA8, 0xE0)) : Brushes.Transparent;
         }
 
-        var canAct = _selectedId is not null || (_selectedKey is not null && _model.FindItem(_selectedKey) is { IsFolder: true });
+        var canAct = _selectedId is not null || _selectedSubKey is not null || (_selectedKey is not null && _model.FindItem(_selectedKey) is { IsFolder: true });
         EditButton.IsEnabled = canAct;
         RemoveButton.IsEnabled = canAct;
     }
@@ -226,15 +238,27 @@ public partial class DesignerWindow : Window
     {
         FolderItems.Children.Clear();
         _folderIcons.Clear();
-        if (_openFolderKey is null || _model.FindItem(_openFolderKey) is not { IsFolder: true } folder)
+        if (_openFolderPath is null)
         {
             FolderPanel.Visibility = Visibility.Collapsed;
             return;
         }
 
         FolderPanel.Visibility = Visibility.Visible;
-        FolderTitle.Text = folder.Label;
-        foreach (var member in folder.Members)
+        var view = _model.FolderContents(_openFolderPath);
+        FolderTitle.Text = string.Join(" > ", FolderPath.Segments(_openFolderPath));
+
+        if (FolderPath.Depth(_openFolderPath) > 1)
+        {
+            FolderItems.Children.Add(BuildFolderNavIcon("..", UpKey, "Voltar para a pasta de cima (solte aqui para subir um nivel)", null));
+        }
+
+        foreach (var sub in view.Subfolders)
+        {
+            FolderItems.Children.Add(BuildFolderNavIcon(FolderPath.Leaf(sub), FolderPath.Key(sub), "Pasta - duplo clique abre", sub));
+        }
+
+        foreach (var member in view.Programs)
         {
             var icon = BuildIconVisual(IconFor(member), member.Name, member.SourceExe);
             // dentro da janela branca o texto precisa ser escuro
@@ -249,17 +273,98 @@ public partial class DesignerWindow : Window
         }
     }
 
+    /// <summary>Icone de subpasta (ou "voltar") dentro da janela da pasta; aceita soltar programas e pastas em cima.</summary>
+    private Border BuildFolderNavIcon(string label, string key, string tooltip, string? path)
+    {
+        var icon = BuildIconVisual(ShellIcon.Folder, label, tooltip);
+        ((TextBlock)((StackPanel)icon.Child).Children[1]).Foreground = Brushes.Black;
+        icon.Tag = key;
+        icon.Margin = new Thickness(2);
+        icon.AllowDrop = true;
+        icon.MouseLeftButtonDown += NavIcon_MouseLeftButtonDown;
+        icon.MouseMove += NavIcon_MouseMove;
+        icon.DragOver += NavIcon_DragOver;
+        icon.Drop += NavIcon_Drop;
+        if (path is not null)
+        {
+            icon.ContextMenu = BuildSubfolderMenu(key);
+        }
+
+        return icon;
+    }
+
     private void CloseFolder_Click(object sender, RoutedEventArgs e)
     {
-        _openFolderKey = null;
+        _openFolderPath = null;
+        _selectedSubKey = null;
         RefreshFolderPanel();
     }
 
     private void OpenFolder(string key)
     {
-        _openFolderKey = key;
+        _openFolderPath = _model.FindFolderPath(key);
+        _selectedSubKey = null;
         RefreshFolderPanel();
         ApplySelection();
+    }
+
+    private void NavigateTo(string? path)
+    {
+        _openFolderPath = string.IsNullOrEmpty(path) ? null : path;
+        _selectedSubKey = null;
+        RefreshFolderPanel();
+        ApplySelection();
+    }
+
+    private void NavIcon_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        var key = (string)((Border)sender).Tag;
+        e.Handled = true;
+        if (e.ClickCount == 2)
+        {
+            NavigateTo(key == UpKey ? FolderPath.Parent(_openFolderPath) : _model.FindFolderPath(key));
+            return;
+        }
+
+        if (key != UpKey)
+        {
+            _selectedSubKey = key;
+            _selectedId = null;
+            _selectedKey = null;
+            ApplySelection();
+            RefreshListSelectionOnly();
+            _pendingDragFolderKey = key;
+            _pendingDragId = null;
+            _pendingDragStart = e.GetPosition(this);
+        }
+    }
+
+    private void NavIcon_MouseMove(object sender, MouseEventArgs e) => TryStartExternalDrag(e, (DependencyObject)sender);
+
+    private void NavIcon_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(ProgramFormat) || e.Data.GetDataPresent(FolderFormat) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void NavIcon_Drop(object sender, DragEventArgs e)
+    {
+        var target = (string)((Border)sender).Tag;
+        var folderPath = target == UpKey ? FolderPath.Parent(_openFolderPath) : _model.FindFolderPath(target);
+        if (folderPath is not null)
+        {
+            if (e.Data.GetData(ProgramFormat) is string id)
+            {
+                _model.MoveToFolderPath(id, folderPath);
+            }
+            else if (e.Data.GetData(FolderFormat) is string source && folderPath.Length > 0)
+            {
+                _model.MoveFolder(source, FolderPath.Key(folderPath));
+            }
+        }
+
+        e.Handled = true;
+        Render();
     }
 
     private void FolderIcon_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -267,6 +372,7 @@ public partial class DesignerWindow : Window
         var id = (string)((Border)sender).Tag;
         _selectedId = id;
         _selectedKey = null;
+        _selectedSubKey = null;
         ApplySelection();
         RefreshListSelectionOnly();
         if (e.ClickCount == 2)
@@ -276,6 +382,7 @@ public partial class DesignerWindow : Window
         else
         {
             _pendingDragId = id;
+            _pendingDragFolderKey = null;
             _pendingDragFromFolder = true;
             _pendingDragStart = e.GetPosition(this);
         }
@@ -297,6 +404,7 @@ public partial class DesignerWindow : Window
 
     private void SelectKey(string key)
     {
+        _selectedSubKey = null;
         _selectedKey = key;
         _selectedId = _model.FindItem(key)?.Program?.Id;
         ApplySelection();
@@ -328,6 +436,7 @@ public partial class DesignerWindow : Window
     private void Desktop_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // clicou no fundo (os ícones marcam o evento como tratado)
+        _selectedSubKey = null;
         _selectedKey = null;
         _selectedId = null;
         ApplySelection();
@@ -408,6 +517,10 @@ public partial class DesignerWindow : Window
         {
             _model.MoveIntoFolder(dragged.Program!.Id, occupant); // soltou sobre uma pasta: entra nela
         }
+        else if (occupant is not null && dragged is { IsFolder: true } && _model.FindItem(occupant) is { IsFolder: true })
+        {
+            _model.MoveFolder(key, occupant); // pasta sobre pasta: vira subpasta
+        }
         else
         {
             _model.MoveTo(key, slot); // célula livre: move; ocupada: troca de lugar
@@ -431,6 +544,7 @@ public partial class DesignerWindow : Window
     {
         var container = ItemsControl.ContainerFromElement(ProgramList, (DependencyObject)e.OriginalSource) as ListBoxItem;
         _pendingDragId = (container?.DataContext as ListRow)?.Id;
+        _pendingDragFolderKey = null;
         _pendingDragFromFolder = false;
         _pendingDragStart = e.GetPosition(this);
     }
@@ -439,7 +553,7 @@ public partial class DesignerWindow : Window
 
     private void TryStartExternalDrag(MouseEventArgs e, DependencyObject source)
     {
-        if (_pendingDragId is null || e.LeftButton != MouseButtonState.Pressed)
+        if ((_pendingDragId is null && _pendingDragFolderKey is null) || e.LeftButton != MouseButtonState.Pressed)
         {
             return;
         }
@@ -451,19 +565,22 @@ public partial class DesignerWindow : Window
             return;
         }
 
-        var data = new DataObject(ProgramFormat, _pendingDragId);
-        if (_pendingDragFromFolder)
+        var data = _pendingDragFolderKey is not null
+            ? new DataObject(FolderFormat, _pendingDragFolderKey)
+            : new DataObject(ProgramFormat, _pendingDragId!);
+        if (_pendingDragFolderKey is null && _pendingDragFromFolder)
         {
             data.SetData(FromFolderFormat, "1");
         }
 
         _pendingDragId = null;
+        _pendingDragFolderKey = null;
         DragDrop.DoDragDrop(source, data, DragDropEffects.Copy | DragDropEffects.Move);
     }
 
     private void Desktop_DragOver(object sender, DragEventArgs e)
     {
-        if (e.Data.GetDataPresent(ProgramFormat) || e.Data.GetDataPresent(DataFormats.FileDrop))
+        if (e.Data.GetDataPresent(ProgramFormat) || e.Data.GetDataPresent(FolderFormat) || e.Data.GetDataPresent(DataFormats.FileDrop))
         {
             e.Effects = DragDropEffects.Copy;
             var pos = e.GetPosition(DesktopCanvas);
@@ -490,6 +607,11 @@ public partial class DesignerWindow : Window
             DropProgram(id, slot, e.Data.GetDataPresent(FromFolderFormat));
             Render();
         }
+        else if (e.Data.GetData(FolderFormat) is string folderKey)
+        {
+            DropFolder(folderKey, slot);
+            Render();
+        }
         else if (e.Data.GetData(DataFormats.FileDrop) is string[] paths)
         {
             // adia: não bloquear o Explorer enquanto os diálogos estão abertos
@@ -497,6 +619,22 @@ public partial class DesignerWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>Pasta arrastada da janela de pasta: sobre outra pasta aninha nela; em lugar livre vai para a area de trabalho.</summary>
+    private void DropFolder(string folderKey, DesktopSlot slot)
+    {
+        var occupant = _model.Layout.FirstOrDefault(kv => kv.Value == slot).Key;
+        if (occupant is not null && _model.FindItem(occupant) is { IsFolder: true })
+        {
+            _model.MoveFolder(folderKey, occupant);
+            return;
+        }
+
+        if (_model.MoveFolder(folderKey, null) && _model.Layout.ContainsKey(folderKey))
+        {
+            _model.MoveTo(folderKey, slot);
+        }
     }
 
     private void DropProgram(string id, DesktopSlot slot, bool fromFolder)
@@ -632,22 +770,41 @@ public partial class DesignerWindow : Window
 
     private void RenameFolder(string key)
     {
-        if (_model.FindItem(key) is not { IsFolder: true } folder)
+        var path = _model.FindFolderPath(key);
+        if (path is null)
         {
             return;
         }
 
-        var name = InputWindow.Ask(this, "Renomear pasta", "Novo nome da pasta na área de trabalho:", folder.Label);
-        if (name is not null && _model.RenameFolder(key, name))
+        var name = InputWindow.Ask(this, "Renomear pasta", "Novo nome da pasta:", FolderPath.Leaf(path));
+        if (name is null || !_model.RenameFolder(key, name))
         {
-            _selectedKey = DesktopLayoutHelper.FolderKey(name);
-            if (_openFolderKey == key)
+            if (name is not null)
             {
-                _openFolderKey = _selectedKey;
+                MessageBox.Show(this, "Nome invalido (use ate 40 caracteres, sem /).", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
-            Render();
+            return;
         }
+
+        var newPath = FolderPath.Combine(FolderPath.Parent(path), name.Trim());
+        var newKey = FolderPath.Key(newPath);
+        if (_openFolderPath is not null && FolderPath.IsSameOrInside(_openFolderPath, path))
+        {
+            _openFolderPath = FolderPath.Replace(_openFolderPath, path, newPath);
+        }
+
+        if (_selectedKey == key)
+        {
+            _selectedKey = newKey;
+        }
+
+        if (_selectedSubKey == key)
+        {
+            _selectedSubKey = newKey;
+        }
+
+        Render();
     }
 
     private void EditSelected()
@@ -655,6 +812,10 @@ public partial class DesignerWindow : Window
         if (_selectedId is not null)
         {
             EditProgram(_selectedId);
+        }
+        else if (_selectedSubKey is not null)
+        {
+            RenameFolder(_selectedSubKey);
         }
         else if (_selectedKey is not null && _model.FindItem(_selectedKey) is { IsFolder: true })
         {
@@ -671,24 +832,35 @@ public partial class DesignerWindow : Window
             _selectedKey = null;
             Render();
         }
-        else if (_selectedKey is not null && _model.FindItem(_selectedKey) is { IsFolder: true } folder)
+        else if (_selectedSubKey is not null)
         {
-            RemoveFolder(folder);
+            RemoveFolderByKey(_selectedSubKey);
+        }
+        else if (_selectedKey is not null && _model.FindItem(_selectedKey) is { IsFolder: true })
+        {
+            RemoveFolderByKey(_selectedKey);
         }
     }
 
-    private void RemoveFolder(DesktopItem folder)
+    private void RemoveFolderByKey(string key)
     {
+        var path = _model.FindFolderPath(key);
+        if (path is null)
+        {
+            return;
+        }
+
+        var count = _model.ProgramsUnder(path).Count;
         var answer = MessageBox.Show(this,
-            $"Remover a pasta \"{folder.Label}\"?\n\nSim = remove a pasta E os {folder.Members.Count} programa(s) dela\nNão = só desfaz a pasta (os programas ficam soltos na área de trabalho)",
+            $"Remover a pasta \"{FolderPath.Leaf(path)}\"?\n\nSim = remove a pasta E os {count} programa(s) dentro dela (inclusive nas subpastas)\nNao = so desfaz a pasta (o conteudo sobe um nivel)",
             "Remover pasta", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.Yes)
         {
-            _model.RemoveItem(folder.Key);
+            _model.RemoveFolder(key);
         }
         else if (answer == MessageBoxResult.No)
         {
-            _model.DissolveFolder(folder.Key);
+            _model.DissolveFolder(key);
         }
         else
         {
@@ -696,8 +868,25 @@ public partial class DesignerWindow : Window
         }
 
         _selectedKey = null;
+        _selectedSubKey = null;
         _selectedId = null;
         Render();
+    }
+
+    /// <summary>Sobe uma pasta um nivel: de dentro de outra pasta para o nivel acima (ou para a area de trabalho).</summary>
+    private void MoveFolderUp(string key)
+    {
+        var path = _model.FindFolderPath(key);
+        if (path is null || FolderPath.Depth(path) < 2)
+        {
+            return;
+        }
+
+        var grand = FolderPath.Parent(FolderPath.Parent(path));
+        if (_model.MoveFolder(key, grand.Length == 0 ? null : FolderPath.Key(grand)))
+        {
+            Render();
+        }
     }
 
     private void Edit_Click(object sender, RoutedEventArgs e) => EditSelected();
@@ -760,7 +949,7 @@ public partial class DesignerWindow : Window
                 _model.DissolveFolder(item.Key);
                 Render();
             }));
-            menu.Items.Add(Item("Remover a pasta e os programas…", (_, _) => RemoveFolder(item)));
+            menu.Items.Add(Item("Remover a pasta e os programas…", (_, _) => RemoveFolderByKey(item.Key)));
             return menu;
         }
 
@@ -789,9 +978,10 @@ public partial class DesignerWindow : Window
     {
         var menu = new ContextMenu();
         menu.Items.Add(Item("Editar…", (_, _) => EditProgram(member.Id)));
-        menu.Items.Add(Item("Tirar da pasta", (_, _) =>
+        menu.Items.Add(Item("Colocar em uma subpasta nova…", (_, _) => PutInSubfolder(member.Id)));
+        menu.Items.Add(Item("Tirar da pasta (sobe um nivel)", (_, _) =>
         {
-            _model.TakeOutOfFolder(member.Id);
+            _model.MoveUpOneLevel(member.Id);
             Render();
         }));
         menu.Items.Add(new Separator());
@@ -801,6 +991,46 @@ public partial class DesignerWindow : Window
             Render();
         }));
         return menu;
+    }
+
+    private ContextMenu BuildSubfolderMenu(string key)
+    {
+        var menu = new ContextMenu();
+        menu.Items.Add(Item("Abrir", (_, _) => OpenFolder(key)));
+        menu.Items.Add(Item("Renomear…", (_, _) => RenameFolder(key)));
+        menu.Items.Add(Item("Subir um nivel", (_, _) => MoveFolderUp(key)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Desfazer a pasta (o conteudo sobe um nivel)", (_, _) =>
+        {
+            _model.DissolveFolder(key);
+            Render();
+        }));
+        menu.Items.Add(Item("Remover a pasta e os programas…", (_, _) => RemoveFolderByKey(key)));
+        return menu;
+    }
+
+    private void PutInSubfolder(string programId)
+    {
+        if (_model.Find(programId) is not { } program)
+        {
+            return;
+        }
+
+        var name = InputWindow.Ask(this, "Nova subpasta", "Nome da nova subpasta (dentro da pasta atual):");
+        if (name is null)
+        {
+            return;
+        }
+
+        var path = FolderPath.Normalize(FolderPath.Combine(program.DesktopFolder, name));
+        if (name.Contains(FolderPath.Separator) || path is null || path.Length == 0)
+        {
+            MessageBox.Show(this, $"Nome invalido ou profundidade acima de {FolderPath.MaxDepth} niveis.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _model.MoveToFolderPath(programId, path);
+        Render();
     }
 
     private void PutInNewFolder(string programId)

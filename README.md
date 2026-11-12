@@ -26,6 +26,7 @@ No grupo **6** clique em **Abrir editor visual…**. Ele mostra a tela do WinPE 
 - **Arraste** os ícones para onde quiser (grade de 80 px; tela de referência 1024x768). Soltar sobre outro ícone **troca de lugar**; soltar um programa **sobre uma pasta** coloca-o dentro dela.
 - **Adicionar:** botões *Adicionar programa…* / *Adicionar pasta de programas…*, ou arraste `.exe` e pastas do Explorer direto para a tela. Arrastar um programa da lista para a tela o coloca na área de trabalho.
 - **Duplo clique** num programa edita; numa pasta abre a janela dela (dá para arrastar de lá para fora). **Botão direito**: editar, colocar em pasta nova, tirar da pasta, remover. **Delete** remove, **F2** renomeia pasta.
+- **Subpastas:** no campo *Pasta no desktop* use `/` (ex.: `Ferramentas/Discos`, até 4 níveis). Dentro da janela de uma pasta há subpastas (duplo clique abre, `..` volta); arraste programas e pastas sobre elas para reorganizar; botão direito cria subpasta, renomeia, sobe um nível ou desfaz.
 - Clique em **Iniciar** para ver o menu por categoria exatamente como será. Na aba **Menu Iniciar** do painel direito dá para **reordenar à mão** categorias e programas (Subir/Descer ou arrastar; soltar um programa sobre outra categoria muda a categoria dele).
 - **Gravar** aplica as mudanças; **Descartar** (ou fechar a janela e escolher "Não") joga tudo fora. As posições são salvas e usadas pelo launcher no WinPE.
 

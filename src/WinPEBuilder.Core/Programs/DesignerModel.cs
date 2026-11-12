@@ -135,7 +135,13 @@ public sealed class DesignerModel
     /// <summary>Remove um ícone da área de trabalho: programa solto = remove o programa; pasta = remove a pasta E seus programas.</summary>
     public void RemoveItem(string key)
     {
-        var item = FindItem(key) ?? throw new InvalidOperationException("Ícone inexistente.");
+        var item = FindItem(key);
+        if (item is null)
+        {
+            RemoveFolder(key); // subpasta (nao tem icone proprio na area de trabalho)
+            return;
+        }
+
         if (item.IsFolder)
         {
             foreach (var member in item.Members)
@@ -149,38 +155,110 @@ public sealed class DesignerModel
         }
     }
 
-    // ---- pastas da área de trabalho ----
-
-    /// <summary>Coloca um programa dentro de uma pasta (ele deixa de ser ícone solto, mas continua no menu Iniciar se estava).</summary>
-    public bool MoveIntoFolder(string programId, string folderKey)
+    /// <summary>Remove uma pasta de qualquer nivel e todos os programas dentro dela (inclusive nas subpastas).</summary>
+    public bool RemoveFolder(string folderKey)
     {
-        var program = Find(programId);
-        var folder = FindItem(folderKey);
-        if (program is null || folder is null || !folder.IsFolder)
+        var path = FindFolderPath(folderKey);
+        if (path is null)
         {
-            return false;
+            throw new InvalidOperationException("Pasta inexistente.");
         }
 
-        Replace(program with { DesktopFolder = folder.Label, ShowOnDesktop = false });
+        foreach (var member in Under(path))
+        {
+            Remove(member.Id);
+        }
+
         return true;
     }
 
-    /// <summary>Tira um programa da pasta e o põe como ícone solto na célula informada (ou na primeira livre).</summary>
-    public bool TakeOutOfFolder(string programId, DesktopSlot? at = null)
+    // ---- pastas da area de trabalho (com subpastas) ----
+
+    /// <summary>Todos os caminhos de pasta que existem agora (inclui intermediarios).</summary>
+    public IReadOnlyList<string> FolderPaths => DesktopLayoutHelper.AllFolderPaths(_programs);
+
+    /// <summary>Caminho (com a caixa do usuario) da pasta de uma chave "f:...", ou null.</summary>
+    public string? FindFolderPath(string folderKey) => FolderPaths.FirstOrDefault(p => FolderPath.Key(p) == folderKey);
+
+    public FolderView FolderContents(string folderPath) => DesktopLayoutHelper.FolderContents(_programs, folderPath);
+
+    /// <summary>Programas dentro da pasta (inclusive nas subpastas).</summary>
+    public IReadOnlyList<ProgramEntry> ProgramsUnder(string folderPath) => Under(folderPath);
+
+    private List<ProgramEntry> Under(string folderPath) =>
+        [.. _programs.Where(p => FolderPath.IsSameOrInside(FolderPath.Normalize(p.DesktopFolder), folderPath))];
+
+    private void SetFolder(ProgramEntry program, string path, bool? showOnDesktop = null)
+    {
+        var index = _programs.FindIndex(p => p.Id == program.Id);
+        _programs[index] = program with { DesktopFolder = path, ShowOnDesktop = showOnDesktop ?? program.ShowOnDesktop };
+    }
+
+    /// <summary>
+    /// Coloca um programa dentro de uma pasta da area de trabalho (ele deixa de ser icone solto, mas continua no menu
+    /// Iniciar se estava). <paramref name="folderKey"/> e a chave de uma pasta de qualquer nivel.
+    /// </summary>
+    public bool MoveIntoFolder(string programId, string folderKey)
     {
         var program = Find(programId);
-        if (program is null || string.IsNullOrEmpty(program.DesktopFolder))
+        var path = FindFolderPath(folderKey);
+        if (program is null || path is null)
         {
             return false;
         }
 
-        _programs[_programs.FindIndex(p => p.Id == program.Id)] = program with { DesktopFolder = string.Empty, ShowOnDesktop = true };
+        SetFolder(program, path, showOnDesktop: false);
+        Refresh(null);
+        Dirty = true;
+        return true;
+    }
+
+    /// <summary>Move um programa para uma pasta (ou, com caminho vazio, para fora de qualquer pasta), sem mexer no icone solto.</summary>
+    public bool MoveToFolderPath(string programId, string folderPath)
+    {
+        var program = Find(programId);
+        var normalized = FolderPath.Normalize(folderPath);
+        if (program is null || normalized is null || FolderPath.Same(program.DesktopFolder, normalized))
+        {
+            return false;
+        }
+
+        SetFolder(program, normalized);
+        Refresh(null);
+        Dirty = true;
+        return true;
+    }
+
+    /// <summary>Sobe um nivel: de uma subpasta para a pasta de cima; de uma pasta de primeiro nivel para a area de trabalho (icone solto).</summary>
+    public bool MoveUpOneLevel(string programId, DesktopSlot? at = null)
+    {
+        var program = Find(programId);
+        if (program is null || FolderPath.Depth(program.DesktopFolder) == 0)
+        {
+            return false;
+        }
+
+        return FolderPath.Depth(program.DesktopFolder) > 1
+            ? MoveToFolderPath(programId, FolderPath.Parent(program.DesktopFolder))
+            : TakeOutOfFolder(programId, at);
+    }
+
+    /// <summary>Tira um programa de qualquer pasta e o poe como icone solto na celula informada (ou na primeira livre).</summary>
+    public bool TakeOutOfFolder(string programId, DesktopSlot? at = null)
+    {
+        var program = Find(programId);
+        if (program is null || FolderPath.Depth(program.DesktopFolder) == 0)
+        {
+            return false;
+        }
+
+        SetFolder(program, string.Empty, showOnDesktop: true);
         Refresh(at is null ? null : (DesktopLayoutHelper.ProgramKey(program), at));
         Dirty = true;
         return true;
     }
 
-    /// <summary>Faz um programa (que estava só no menu Iniciar) aparecer na área de trabalho, numa célula escolhida.</summary>
+    /// <summary>Faz um programa (que estava so no menu Iniciar) aparecer na area de trabalho, numa celula escolhida.</summary>
     public bool ShowOnDesktopAt(string programId, DesktopSlot at)
     {
         var program = Find(programId);
@@ -195,46 +273,106 @@ public sealed class DesignerModel
         return true;
     }
 
-    /// <summary>Renomeia uma pasta da área de trabalho (todos os programas dela), mantendo a posição do ícone.</summary>
+    /// <summary>
+    /// Renomeia uma pasta de qualquer nivel (so o ultimo nivel do caminho; os programas e subpastas dentro dela vao junto).
+    /// Se for pasta da area de trabalho, o icone mantem a posicao.
+    /// </summary>
     public bool RenameFolder(string folderKey, string newName)
     {
         newName = (newName ?? string.Empty).Trim();
-        var folder = FindItem(folderKey);
-        if (folder is null || !folder.IsFolder || newName.Length == 0 || newName.Length > 40 || newName.Any(char.IsControl))
+        var path = FindFolderPath(folderKey);
+        if (path is null || newName.Length == 0 || newName.Contains(FolderPath.Separator) || newName.Length > FolderPath.MaxSegmentLength
+            || newName.Any(char.IsControl))
         {
             return false;
         }
 
-        var oldSlot = _layout[folderKey];
-        foreach (var member in folder.Members)
+        var newPath = FolderPath.Combine(FolderPath.Parent(path), newName);
+        if (FolderPath.Normalize(newPath) is null)
         {
-            var index = _programs.FindIndex(p => p.Id == member.Id);
-            _programs[index] = _programs[index] with { DesktopFolder = newName };
+            return false;
         }
 
-        var newKey = DesktopLayoutHelper.FolderKey(newName);
-        Refresh(newKey == folderKey ? null : (newKey, oldSlot));
+        var topLevel = FolderPath.Depth(path) == 1;
+        var oldSlot = topLevel && _layout.TryGetValue(folderKey, out var slot) ? slot : (DesktopSlot?)null;
+        foreach (var member in Under(path))
+        {
+            SetFolder(member, FolderPath.Replace(FolderPath.Normalize(member.DesktopFolder)!, path, newPath));
+        }
+
+        var newKey = FolderPath.Key(newPath);
+        Refresh(topLevel && oldSlot is { } s && newKey != folderKey ? (newKey, s) : null);
         Dirty = true;
         return true;
     }
 
-    /// <summary>Dissolve a pasta: os programas dela deixam de pertencer a pasta alguma e viram ícones soltos.</summary>
+    /// <summary>
+    /// Dissolve a pasta: os programas dela sobem um nivel (os de uma pasta de primeiro nivel viram icones soltos) e as
+    /// subpastas dela passam a ficar na pasta de cima.
+    /// </summary>
     public void DissolveFolder(string folderKey)
     {
-        var folder = FindItem(folderKey);
-        if (folder is null || !folder.IsFolder)
+        var path = FindFolderPath(folderKey);
+        if (path is null)
         {
             return;
         }
 
-        foreach (var member in folder.Members)
+        var parent = FolderPath.Parent(path);
+        foreach (var member in Under(path))
         {
-            var index = _programs.FindIndex(p => p.Id == member.Id);
-            _programs[index] = _programs[index] with { DesktopFolder = string.Empty, ShowOnDesktop = true };
+            var current = FolderPath.Normalize(member.DesktopFolder)!;
+            var moved = FolderPath.Replace(current, path, parent);
+            // o que estava exatamente na pasta dissolvida e nao tem pasta de cima vira icone solto
+            SetFolder(member, moved, showOnDesktop: moved.Length == 0 ? true : null);
         }
 
         Refresh(null);
         Dirty = true;
+    }
+
+    /// <summary>
+    /// Move uma pasta (com tudo dentro) para dentro de outra pasta (<paramref name="targetKey"/>) ou, se
+    /// <paramref name="targetKey"/> for null, para a area de trabalho (primeiro nivel). Recusa mover para dentro de si
+    /// mesma e passar do limite de niveis.
+    /// </summary>
+    public bool MoveFolder(string sourceKey, string? targetKey)
+    {
+        var source = FindFolderPath(sourceKey);
+        if (source is null)
+        {
+            return false;
+        }
+
+        var targetPath = targetKey is null ? string.Empty : FindFolderPath(targetKey);
+        if (targetPath is null || FolderPath.IsSameOrInside(targetPath, source))
+        {
+            return false;
+        }
+
+        var newPath = FolderPath.Combine(targetPath, FolderPath.Leaf(source));
+        var members = Under(source);
+        foreach (var member in members)
+        {
+            if (FolderPath.Normalize(FolderPath.Replace(FolderPath.Normalize(member.DesktopFolder)!, source, newPath)) is null)
+            {
+                return false; // passaria do limite de niveis
+            }
+        }
+
+        if (FolderPath.Same(source, newPath))
+        {
+            return false;
+        }
+
+        foreach (var member in members)
+        {
+            SetFolder(member, FolderPath.Replace(FolderPath.Normalize(member.DesktopFolder)!, source, newPath));
+        }
+
+        Refresh(null);
+        Dirty = true;
+        return true;
     }
 
     // ---- ordem do menu Iniciar ----

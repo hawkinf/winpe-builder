@@ -148,9 +148,9 @@ public sealed record ProgramEntry
                 errors.Add($"Programa \"{label}\": só são aceitos {string.Join(", ", AllowedExtensions)}.");
             }
 
-            if ((p.DesktopFolder?.Length ?? 0) > 40 || (p.DesktopFolder ?? string.Empty).Any(char.IsControl))
+            if (FolderPath.Normalize(p.DesktopFolder) is null)
             {
-                errors.Add($"Programa \"{label}\": o nome da pasta da área de trabalho deve ter até 40 caracteres.");
+                errors.Add($"Programa \"{label}\": o nome da pasta da área de trabalho é inválido (até {FolderPath.MaxDepth} níveis separados por /, cada um com até {FolderPath.MaxSegmentLength} caracteres).");
             }
 
             if (p.CopyFolder && !p.ExeIsInsideSourceFolder)

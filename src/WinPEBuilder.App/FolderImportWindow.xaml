@@ -43,7 +43,8 @@
             <CheckBox x:Name="ShowFolderCheck" VerticalAlignment="Center" Margin="0,0,10,0"
                       Content="Colocar esta pasta na área de trabalho (abre uma janela com todos os programas marcados):"
                       Checked="ShowFolder_Changed" Unchecked="ShowFolder_Changed"/>
-            <TextBox x:Name="FolderNameBox" Grid.Column="1" MaxLength="40" VerticalContentAlignment="Center" IsEnabled="False"/>
+            <TextBox x:Name="FolderNameBox" Grid.Column="1" MaxLength="120" VerticalContentAlignment="Center" IsEnabled="False"
+                     ToolTip="Use / para criar subpastas (ex.: Ferramentas/Discos)"/>
         </Grid>
 
         <WrapPanel Grid.Row="3" Margin="0,0,0,6">

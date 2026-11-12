@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Linq;
 using System.Windows.Forms;
 using WinPEBuilder.Launcher.Model;
 
@@ -45,12 +46,34 @@ namespace WinPEBuilder.Launcher
         }
     }
 
-    /// <summary>Janela que mostra os programas de uma pasta da área de trabalho.</summary>
+    /// <summary>Destino de navegacao de um item da janela de pasta (subpasta ou "voltar").</summary>
+    internal sealed class FolderNav
+    {
+        public FolderNav(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; private set; }
+    }
+
+    /// <summary>Janela que mostra o conteudo de uma pasta da area de trabalho: subpastas (navegaveis) e programas.</summary>
     internal sealed class FolderForm : Form
     {
+        private readonly ListView _list;
+        private readonly ImageList _images;
+        private readonly List<ProgramItem> _all;
+        private readonly ProgramRunner _runner;
+        private readonly Action<ProgramItem> _launch;
+        private string _current;
+
         public FolderForm(DesktopFolder folder, ProgramRunner runner, Action<ProgramItem> launch)
         {
-            Text = folder.Name;
+            _all = folder.Programs;
+            _runner = runner;
+            _launch = launch;
+            _current = folder.Name;
+
             Icon = SystemIcons.Application;
             Font = SystemFonts.MessageBoxFont;
             StartPosition = FormStartPosition.CenterScreen;
@@ -58,7 +81,7 @@ namespace WinPEBuilder.Launcher
             MinimumSize = new Size(300, 200);
             ShowInTaskbar = false;
 
-            var list = new ListView
+            _list = new ListView
             {
                 Dock = DockStyle.Fill,
                 View = View.LargeIcon,
@@ -67,24 +90,59 @@ namespace WinPEBuilder.Launcher
                 ShowItemToolTips = true,
                 Activation = ItemActivation.Standard,
             };
+            _images = new ImageList { ImageSize = new Size(32, 32), ColorDepth = ColorDepth.Depth32Bit };
+            _list.LargeImageList = _images;
+            _list.ItemActivate += (s, e) => Activate(_list.SelectedItems.Count > 0 ? _list.SelectedItems[0].Tag : null);
+            Controls.Add(_list);
+            Populate();
+        }
 
-            var images = new ImageList { ImageSize = new Size(32, 32), ColorDepth = ColorDepth.Depth32Bit };
-            list.LargeImageList = images;
-            foreach (var program in folder.Programs)
+        private void Activate(object tag)
+        {
+            var program = tag as ProgramItem;
+            if (program != null)
             {
-                images.Images.Add(ProgramRunner.LoadIcon(runner.ExePath(program), 32));
-                list.Items.Add(new ListViewItem(program.Name, images.Images.Count - 1) { Tag = program, ToolTipText = program.Exe });
+                _launch(program);
+                return;
             }
 
-            list.ItemActivate += (s, e) =>
+            var nav = tag as FolderNav;
+            if (nav != null)
             {
-                if (list.SelectedItems.Count > 0)
-                {
-                    launch((ProgramItem)list.SelectedItems[0].Tag);
-                }
-            };
+                _current = nav.Path;
+                Populate();
+            }
+        }
 
-            Controls.Add(list);
+        private void Populate()
+        {
+            _list.Items.Clear();
+            _images.Images.Clear();
+            Text = string.Join(" > ", ManifestReader.FolderSegments(_current));
+            var content = ManifestReader.FolderContents(_all, _current);
+
+            if (ManifestReader.FolderSegments(_current).Count > 1)
+            {
+                _images.Images.Add(FolderIcon.Create(32));
+                _list.Items.Add(new ListViewItem("..", _images.Images.Count - 1)
+                {
+                    Tag = new FolderNav(ManifestReader.FolderParent(_current)),
+                    ToolTipText = "Voltar para a pasta de cima",
+                });
+            }
+
+            foreach (var sub in content.Subfolders)
+            {
+                _images.Images.Add(FolderIcon.Create(32));
+                var leaf = ManifestReader.FolderSegments(sub).Last();
+                _list.Items.Add(new ListViewItem(leaf, _images.Images.Count - 1) { Tag = new FolderNav(sub), ToolTipText = "Pasta - duplo clique abre" });
+            }
+
+            foreach (var program in content.Programs)
+            {
+                _images.Images.Add(ProgramRunner.LoadIcon(_runner.ExePath(program), 32));
+                _list.Items.Add(new ListViewItem(program.Name, _images.Images.Count - 1) { Tag = program, ToolTipText = program.Exe });
+            }
         }
     }
 }

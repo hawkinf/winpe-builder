@@ -72,6 +72,14 @@ namespace WinPEBuilder.Launcher.Model
         public string Folder { get; set; }
     }
 
+    /// <summary>Conteudo de uma pasta da area de trabalho.</summary>
+    public class FolderContent
+    {
+        public List<string> Subfolders { get; set; }
+
+        public List<ProgramItem> Programs { get; set; }
+    }
+
     /// <summary>Lê e interpreta o programs.json. Sem dependências além do .NET Framework (roda no WinPE).</summary>
     public static class ManifestReader
     {
@@ -215,9 +223,84 @@ namespace WinPEBuilder.Launcher.Model
             return "p:" + program.Id;
         }
 
-        public static string FolderKey(string folderName)
+        /// <summary>Niveis de um caminho de pasta ("A / B/" vira A, B): separador "/", sem espacos nas pontas e sem niveis vazios.</summary>
+        public static List<string> FolderSegments(string path)
         {
-            return "f:" + (folderName ?? string.Empty).Trim().ToUpperInvariant();
+            return (path ?? string.Empty).Split('/').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+        }
+
+        public static string FolderTop(string path)
+        {
+            var segments = FolderSegments(path);
+            return segments.Count == 0 ? string.Empty : segments[0];
+        }
+
+        public static string FolderParent(string path)
+        {
+            var segments = FolderSegments(path);
+            return segments.Count <= 1 ? string.Empty : string.Join("/", segments.Take(segments.Count - 1));
+        }
+
+        public static string FolderKey(string folderPath)
+        {
+            return "f:" + string.Join("/", FolderSegments(folderPath)).ToUpperInvariant();
+        }
+
+        /// <summary>true se <paramref name="path"/> e <paramref name="folder"/> ou esta dentro dela (ignora a caixa).</summary>
+        public static bool FolderContains(string folder, string path)
+        {
+            var f = FolderSegments(folder);
+            var p = FolderSegments(path);
+            if (f.Count == 0 || p.Count < f.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < f.Count; i++)
+            {
+                if (!string.Equals(f[i], p[i], StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>Conteudo de uma pasta: subpastas diretas (caminhos completos) e programas que estao exatamente nela.</summary>
+        public static FolderContent FolderContents(IEnumerable<ProgramItem> programs, string folderPath)
+        {
+            var depth = FolderSegments(folderPath).Count;
+            var subfolders = new Dictionary<string, string>(StringComparer.Ordinal);
+            var direct = new List<ProgramItem>();
+            foreach (var program in programs)
+            {
+                if (!FolderContains(folderPath, program.Folder))
+                {
+                    continue;
+                }
+
+                var segments = FolderSegments(program.Folder);
+                if (segments.Count == depth)
+                {
+                    direct.Add(program);
+                }
+                else
+                {
+                    var sub = string.Join("/", segments.Take(depth + 1));
+                    var key = FolderKey(sub);
+                    if (!subfolders.ContainsKey(key))
+                    {
+                        subfolders[key] = sub;
+                    }
+                }
+            }
+
+            return new FolderContent
+            {
+                Subfolders = subfolders.Values.OrderBy(x => x, StringComparer.CurrentCultureIgnoreCase).ToList(),
+                Programs = direct.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList(),
+            };
         }
 
         /// <summary>
@@ -256,12 +339,12 @@ namespace WinPEBuilder.Launcher.Model
         public static List<KeyValuePair<string, List<ProgramItem>>> DesktopFolders(IEnumerable<ProgramItem> programs)
         {
             return programs
-                .Where(p => !string.IsNullOrEmpty(p.Folder))
-                .GroupBy(p => p.Folder, StringComparer.CurrentCultureIgnoreCase)
-                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Where(p => FolderTop(p.Folder).Length > 0)
+                .GroupBy(p => FolderKey(FolderTop(p.Folder)))
                 .Select(g => new KeyValuePair<string, List<ProgramItem>>(
-                    g.Key,
+                    FolderTop(g.First().Folder),
                     g.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList()))
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
 

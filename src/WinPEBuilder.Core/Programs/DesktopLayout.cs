@@ -3,6 +3,9 @@ namespace WinPEBuilder.Core.Programs;
 /// <summary>Célula da grade da área de trabalho (coluna, linha), começando em 0,0 no canto superior esquerdo.</summary>
 public sealed record DesktopSlot(int Col, int Row);
 
+/// <summary>Conteúdo de uma pasta da área de trabalho: subpastas (caminhos completos) e programas diretos.</summary>
+public sealed record FolderView(string Path, IReadOnlyList<string> Subfolders, IReadOnlyList<ProgramEntry> Programs);
+
 /// <summary>Um ícone da área de trabalho: um programa solto ou uma pasta (com os programas que ela contém).</summary>
 public sealed record DesktopItem(string Key, bool IsFolder, string Label, ProgramEntry? Program, IReadOnlyList<ProgramEntry> Members);
 
@@ -28,7 +31,8 @@ public static class DesktopLayoutHelper
 
     public static string ProgramKey(ProgramEntry program) => "p:" + program.Id;
 
-    public static string FolderKey(string folderName) => "f:" + (folderName ?? string.Empty).Trim().ToUpperInvariant();
+    /// <summary>Chave de uma pasta (pelo caminho completo; no desktop só aparecem as de primeiro nível).</summary>
+    public static string FolderKey(string folderName) => FolderPath.Key(folderName);
 
     /// <summary>
     /// Ícones da área de trabalho na mesma ordem do launcher: pastas primeiro (alfabética), depois os programas soltos
@@ -41,13 +45,14 @@ public static class DesktopLayoutHelper
         var items = new List<DesktopItem>();
 
         var folders = programs
-            .Where(p => !string.IsNullOrWhiteSpace(p.DesktopFolder))
-            .GroupBy(p => p.DesktopFolder.Trim(), comparer)
-            .OrderBy(g => g.Key, comparer);
+            .Select(p => (Program: p, Top: FolderPath.Top(FolderPath.Normalize(p.DesktopFolder))))
+            .Where(x => x.Top.Length > 0)
+            .GroupBy(x => FolderPath.Key(x.Top))
+            .OrderBy(g => g.First().Top, comparer);
         foreach (var folder in folders)
         {
-            var members = folder.OrderBy(p => p.Name, comparer).ToList();
-            items.Add(new DesktopItem(FolderKey(folder.Key), true, folder.Key, null, members));
+            var members = folder.Select(x => x.Program).OrderBy(p => p.Name, comparer).ToList();
+            items.Add(new DesktopItem(folder.Key, true, folder.First().Top, null, members));
         }
 
         foreach (var program in programs.Where(p => p.ShowOnDesktop).OrderBy(p => p.Name, comparer))
@@ -56,6 +61,55 @@ public static class DesktopLayoutHelper
         }
 
         return items;
+    }
+
+    /// <summary>Todos os caminhos de pasta existentes, inclusive os intermediários ("A/B" cria também "A"), sem repetir.</summary>
+    public static IReadOnlyList<string> AllFolderPaths(IReadOnlyList<ProgramEntry> programs)
+    {
+        ArgumentNullException.ThrowIfNull(programs);
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var program in programs)
+        {
+            var segments = FolderPath.Segments(FolderPath.Normalize(program.DesktopFolder));
+            for (var depth = 1; depth <= segments.Count; depth++)
+            {
+                var path = string.Join(FolderPath.Separator, segments.Take(depth));
+                seen.TryAdd(FolderPath.Key(path), path);
+            }
+        }
+
+        return [.. seen.Values.OrderBy(p => p, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
+    /// <summary>Conteúdo de uma pasta: subpastas diretas (caminhos completos) e programas que estão exatamente nela.</summary>
+    public static FolderView FolderContents(IReadOnlyList<ProgramEntry> programs, string folderPath)
+    {
+        ArgumentNullException.ThrowIfNull(programs);
+        var comparer = StringComparer.CurrentCultureIgnoreCase;
+        var depth = FolderPath.Depth(folderPath);
+        var subfolders = new Dictionary<string, string>(StringComparer.Ordinal);
+        var direct = new List<ProgramEntry>();
+        foreach (var program in programs)
+        {
+            var path = FolderPath.Normalize(program.DesktopFolder) ?? string.Empty;
+            if (!FolderPath.IsSameOrInside(path, folderPath))
+            {
+                continue;
+            }
+
+            var segments = FolderPath.Segments(path);
+            if (segments.Count == depth)
+            {
+                direct.Add(program);
+            }
+            else
+            {
+                var sub = string.Join(FolderPath.Separator, segments.Take(depth + 1));
+                subfolders.TryAdd(FolderPath.Key(sub), sub);
+            }
+        }
+
+        return new FolderView(folderPath, [.. subfolders.Values.OrderBy(p => p, comparer)], [.. direct.OrderBy(p => p.Name, comparer)]);
     }
 
     public static bool InBounds(DesktopSlot slot) =>
