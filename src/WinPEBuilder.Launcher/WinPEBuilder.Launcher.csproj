@@ -11,6 +11,8 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
+    <!-- Restaura para os dois: o restore disparado pelo "dotnet publish -r win-x64" do App usa win-x64, o build usa o padrão (win-x86). -->
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
     <AssemblyName>WinPELauncher</AssemblyName>
     <RootNamespace>WinPEBuilder.Launcher</RootNamespace>
     <ApplicationIcon>..\WinPEBuilder.App\app.ico</ApplicationIcon>

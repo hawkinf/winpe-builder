@@ -53,6 +53,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-12 — Claude Code — correção do publish (NETSDK1005/1047): GlobalPropertiesToRemove no ProjectReference do launcher, RuntimeIdentifiers no Launcher, alvo PublishLauncher (launcher\ na pasta publicada, também em single-file). Validar: `dotnet publish src/WinPEBuilder.App -c Release -r win-x64 -o <pasta>` e conferir `<pasta>\launcher\WinPELauncher.exe` (testado x64, x86, self-contained+single-file; Launcher sozinho também publica).
 - 2026-11-12 — Claude Code — passos A2+A3+A4 (programas com ícone): tela Programas (ProgramWindow, UserSettings.Programs), projeto Launcher net48 (desktop/barra/Iniciar), injeção na imagem (BuildOptions.InstallLauncher/EffectiveComponents, StartnetScript launcher, CopyLauncher no App). Validar: dotnet test src/WinPEBuilder.sln (101 ok) e `WinPELauncher.exe --preview --manifest <programs.json>`.
 - 2026-11-11 — Claude Code — correção de docs: barras invertidas perdidas em linhas do STATUS (passo 5 e A1/A2–A4).
 - 2026-11-11 — Claude Code — passo A1 (programas no WinPE): Core/Programs (ProgramEntry+validação+IsProtectedFolder, ProgramStaging: cópia p/ Arquivos\Programas\{id} e programs.json v1), BuildOptions.Programs/EffectiveFilesMode (programas sozinhos => OnIso), travas (pasta protegida, sobreposição, 1 GB na imagem). Validar: dotnet test src/WinPEBuilder.sln (74 ok).

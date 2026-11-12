@@ -29,17 +29,30 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- O launcher (net48) é compilado junto e copiado para launcher\ ao lado do .exe; vai para dentro do WinPE. -->
+    <!--
+      O launcher (net48) é compilado junto e copiado para launcher\ ao lado do .exe (build E publish); vai para dentro do WinPE.
+      GlobalPropertiesToRemove: sem isso o "dotnet publish -r win-x64" repassaria TargetFramework=net10.0-windows e o
+      RuntimeIdentifier do app para o launcher, que é net48 (erro NETSDK1005).
+    -->
     <ProjectReference Include="..\WinPEBuilder.Launcher\WinPEBuilder.Launcher.csproj"
-                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true"
+                      GlobalPropertiesToRemove="TargetFramework;RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;PublishTrimmed;PublishDir" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <LauncherBuilt>$(MSBuildThisFileDirectory)..\WinPEBuilder.Launcher\bin\$(Configuration)\net48\WinPELauncher.exe</LauncherBuilt>
+  </PropertyGroup>
+
   <Target Name="CopyLauncher" AfterTargets="Build">
-    <PropertyGroup>
-      <LauncherBuilt>$(MSBuildThisFileDirectory)..\WinPEBuilder.Launcher\bin\$(Configuration)\net48\WinPELauncher.exe</LauncherBuilt>
-    </PropertyGroup>
     <Copy SourceFiles="$(LauncherBuilt)" DestinationFolder="$(OutDir)launcher" Condition="Exists('$(LauncherBuilt)')" />
     <Warning Condition="!Exists('$(LauncherBuilt)')" Text="WinPELauncher.exe não encontrado em $(LauncherBuilt)" />
+  </Target>
+
+  <!-- dotnet publish: coloca launcher\WinPELauncher.exe na pasta de publicação (o build service procura ao lado do .exe). -->
+  <Target Name="PublishLauncher" AfterTargets="ComputeResolvedFilesToPublishList" Condition="Exists('$(LauncherBuilt)')">
+    <ItemGroup>
+      <ResolvedFileToPublish Include="$(LauncherBuilt)" RelativePath="launcher\WinPELauncher.exe" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    </ItemGroup>
   </Target>
 
   <ItemGroup>
