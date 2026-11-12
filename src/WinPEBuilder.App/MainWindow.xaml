@@ -127,6 +127,9 @@
                                 </GridView>
                             </ListView.View>
                         </ListView>
+                        <Button x:Name="DesignerButton" Content="Abrir editor visual…" FontWeight="Bold" Padding="16,7" HorizontalAlignment="Left"
+                                ToolTip="Mostra como o desktop e o menu Iniciar do WinPE vão ficar (sem executar nada). Arraste, adicione e remova; depois grave ou descarte."
+                                Click="DesignerButton_Click" Margin="0,8,0,4"/>
                         <WrapPanel Margin="0,6,0,0">
                             <Button x:Name="ProgramAddButton" Content="Adicionar programa…" Click="ProgramAddButton_Click"/>
                             <Button x:Name="ProgramAddFolderButton" Content="Adicionar pasta…" Click="ProgramAddFolderButton_Click"/>

@@ -17,7 +17,7 @@ public partial class ProgramWindow : Window
     /// <summary>Preenchido quando o usuário confirma com OK.</summary>
     public ProgramEntry? Result { get; private set; }
 
-    public ProgramWindow(ProgramEntry? existing, IEnumerable<string> categories, IEnumerable<string> allIds)
+    public ProgramWindow(ProgramEntry? existing, IEnumerable<string> categories, IEnumerable<string> allIds, string? initialExe = null)
     {
         InitializeComponent();
         _existing = existing;
@@ -44,6 +44,11 @@ public partial class ProgramWindow : Window
             DesktopCheck.IsChecked = existing.ShowOnDesktop;
             StartMenuCheck.IsChecked = existing.ShowInStartMenu;
             CopyFolderCheck.IsChecked = existing.CopyFolder;
+        }
+
+        if (existing is null && !string.IsNullOrWhiteSpace(initialExe))
+        {
+            ExeBox.Text = initialExe; // dispara a sugestão de nome e o cálculo de tamanho
         }
 
         NameBox.TextChanged += (_, _) =>

@@ -51,12 +51,16 @@ public partial class FolderImportWindow : Window
     /// <summary>Programas a adicionar (preenchido com OK).</summary>
     public IReadOnlyList<ProgramEntry> Results { get; private set; } = [];
 
-    public FolderImportWindow(IEnumerable<string> existingIds)
+    public FolderImportWindow(IEnumerable<string> existingIds, string? initialFolder = null)
     {
         InitializeComponent();
         _existingIds = [.. existingIds];
         Grid.ItemsSource = _rows;
         InfoText.Text = "Escolha uma pasta (ex.: a pasta de um programa portátil ou de um pacote de ferramentas).";
+        if (!string.IsNullOrWhiteSpace(initialFolder))
+        {
+            Loaded += async (_, _) => await LoadFolderAsync(initialFolder);
+        }
     }
 
     private async void Browse_Click(object sender, RoutedEventArgs e)

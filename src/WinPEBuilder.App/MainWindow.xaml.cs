@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly bool _ready;
 
     private List<ProgramEntry> _programs = [];
+    private Dictionary<string, DesktopSlot> _layout = [];
     private int _summaryVersion;
     private CancellationTokenSource? _cts;
     private LogFile? _logFile;
@@ -111,6 +112,7 @@ public partial class MainWindow : Window
         FilesFolderBox.Text = s.FilesFolder;
         (s.FilesMode == FilesMode.InsideImage ? FilesInsideRadio : FilesOnIsoRadio).IsChecked = true;
         _programs = [.. s.Programs];
+        _layout = new Dictionary<string, DesktopSlot>(s.DesktopLayout);
         RefreshPrograms();
         _lastOutputDefault = DefaultOutputPath(s.Architecture);
         OutputBox.Text = string.IsNullOrWhiteSpace(s.OutputIsoPath) ? _lastOutputDefault : s.OutputIsoPath;
@@ -128,6 +130,7 @@ public partial class MainWindow : Window
         FilesMode = FilesInsideRadio.IsChecked == true ? FilesMode.InsideImage : FilesMode.OnIso,
         OutputIsoPath = OutputBox.Text.Trim(),
         Programs = [.. _programs],
+        DesktopLayout = _layout,
     };
 
     /// <summary>Monta as opções de geração a partir da tela; null (com mensagem) se algo estiver inválido.</summary>
@@ -150,6 +153,7 @@ public partial class MainWindow : Window
                 FilesFolder = string.IsNullOrEmpty(s.FilesFolder) ? null : Path.GetFullPath(s.FilesFolder),
                 FilesMode = string.IsNullOrEmpty(s.FilesFolder) ? FilesMode.None : s.FilesMode,
                 Programs = s.Programs,
+                DesktopLayout = PrunedLayout(s.Programs, s.DesktopLayout),
                 LauncherExePath = LauncherPath,
             };
         }
@@ -345,6 +349,26 @@ public partial class MainWindow : Window
             _programs.Add(dialog.Result);
             RefreshPrograms(_programs.Count - 1);
         }
+    }
+
+    /// <summary>Layout só com ícones que ainda existem (e células válidas); vazio se o usuário nunca usou o editor visual.</summary>
+    private static Dictionary<string, DesktopSlot> PrunedLayout(IReadOnlyList<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot> layout) =>
+        layout.Count == 0
+            ? []
+            : DesktopLayoutHelper.Normalize(DesktopLayoutHelper.Items(programs), layout);
+
+    private void DesignerButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DesignerWindow(_programs, _layout) { Owner = this };
+        dialog.ShowDialog();
+        if (!dialog.Saved)
+        {
+            return; // descartado: nada muda
+        }
+
+        _programs = [.. dialog.Programs];
+        _layout = new Dictionary<string, DesktopSlot>(dialog.Layout);
+        RefreshPrograms();
     }
 
     private void ProgramAddFolderButton_Click(object sender, RoutedEventArgs e)

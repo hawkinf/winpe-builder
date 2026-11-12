@@ -17,6 +17,7 @@ public sealed record UserSettings
     public FilesMode FilesMode { get; init; } = FilesMode.OnIso;
     public string OutputIsoPath { get; init; } = string.Empty;
     public ProgramEntry[] Programs { get; init; } = [];
+    public Dictionary<string, DesktopSlot> DesktopLayout { get; init; } = [];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

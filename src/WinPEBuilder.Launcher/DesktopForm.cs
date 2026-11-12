@@ -15,8 +15,9 @@ namespace WinPEBuilder.Launcher
         private readonly TaskbarForm _taskbar;
         private readonly ListView _icons;
         private Rectangle _originalWorkArea;
+        private readonly List<LayoutEntry> _layout;
 
-        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, bool preview, string notice)
+        public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, bool preview, string notice)
         {
             _preview = preview;
             _taskbar = new TaskbarForm(runner, programs, preview);
@@ -79,6 +80,7 @@ namespace WinPEBuilder.Launcher
                 OpenFolder((DesktopFolder)tag, runner);
             };
 
+            _layout = layout;
             Controls.Add(_icons);
 
             var message = notice;
@@ -123,6 +125,38 @@ namespace WinPEBuilder.Launcher
             }
         }
 
+        /// <summary>
+        /// Posiciona os ícones na grade gravada pelo editor visual. Se faltar posição para algum ícone, deixa a
+        /// arrumação automática do ListView para todos (nunca esconde um programa).
+        /// </summary>
+        private void ApplyLayout(List<LayoutEntry> layout)
+        {
+            if (layout == null || layout.Count == 0 || _icons.Items.Count == 0)
+            {
+                return;
+            }
+
+            var keys = new List<string>();
+            foreach (ListViewItem item in _icons.Items)
+            {
+                var program = item.Tag as ProgramItem;
+                keys.Add(program != null ? ManifestReader.ProgramKey(program) : ManifestReader.FolderKey(((DesktopFolder)item.Tag).Name));
+            }
+
+            var positions = ManifestReader.PixelPositions(layout, keys);
+            if (positions == null)
+            {
+                AppLog.Write("layout incompleto no manifesto: usando arrumação automática");
+                return;
+            }
+
+            _icons.AutoArrange = false;
+            for (var i = 0; i < _icons.Items.Count; i++)
+            {
+                _icons.Items[i].Position = positions[keys[i]];
+            }
+        }
+
         private readonly Dictionary<string, FolderForm> _openFolders = new Dictionary<string, FolderForm>(StringComparer.CurrentCultureIgnoreCase);
 
         /// <summary>Abre (ou traz para frente) a janela de uma pasta da área de trabalho.</summary>
@@ -144,6 +178,7 @@ namespace WinPEBuilder.Launcher
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            ApplyLayout(_layout); // só funciona com o handle do ListView já criado
             _taskbar.Show();
             if (!_preview)
             {

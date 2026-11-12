@@ -59,6 +59,9 @@ public sealed record BuildOptions
     /// <summary>Programas que aparecem no desktop/menu Iniciar do WinPE (copiados para Arquivos\Programas).</summary>
     public IReadOnlyList<ProgramEntry> Programs { get; init; } = [];
 
+    /// <summary>Posição dos ícones na área de trabalho (editor visual). Vazio = o launcher arruma sozinho.</summary>
+    public IReadOnlyDictionary<string, DesktopSlot> DesktopLayout { get; init; } = new Dictionary<string, DesktopSlot>();
+
     /// <summary>
     /// Modo realmente usado: com programas e sem pasta de arquivos escolhida, os programas vão na ISO
     /// (não ocupam RAM); o usuário só controla o modo se escolheu um.

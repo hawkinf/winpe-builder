@@ -48,10 +48,16 @@ public static class ProgramStaging
     /// <summary>Atalho para um programa isolado.</summary>
     public static string RelativeExe(ProgramEntry program) => RelativeExe([program], program);
 
-    /// <summary>Texto do programs.json (versão 1).</summary>
-    public static string BuildManifest(IReadOnlyList<ProgramEntry> programs)
+    /// <summary>
+    /// Texto do programs.json (versão 1). Com <paramref name="layout"/> não vazio, grava também a posição de cada ícone da
+    /// área de trabalho (campo opcional "layout"); sem ele o launcher arruma os ícones sozinho.
+    /// </summary>
+    public static string BuildManifest(IReadOnlyList<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
+        var slots = layout is { Count: > 0 }
+            ? DesktopLayoutHelper.Normalize(DesktopLayoutHelper.Items(programs), layout)
+            : null;
         var manifest = new
         {
             version = 1,
@@ -66,6 +72,7 @@ public static class ProgramStaging
                 startMenu = p.ShowInStartMenu,
                 folder = p.DesktopFolder ?? string.Empty,
             }),
+            layout = slots?.Select(kv => new { key = kv.Key, col = kv.Value.Col, row = kv.Value.Row }).ToArray(),
         };
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
@@ -91,7 +98,8 @@ public static class ProgramStaging
     }
 
     /// <summary>Copia cada programa para Arquivos\Programas\&lt;pasta&gt; e grava o manifesto em Arquivos\programs.json.</summary>
-    public static void Stage(IReadOnlyList<ProgramEntry> programs, string filesRoot, CancellationToken cancellationToken = default)
+    public static void Stage(IReadOnlyList<ProgramEntry> programs, string filesRoot, CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, DesktopSlot>? layout = null)
     {
         ArgumentNullException.ThrowIfNull(programs);
         if (programs.Count == 0)
@@ -121,6 +129,6 @@ public static class ProgramStaging
         }
 
         // UTF-8 sem BOM: o launcher (DataContractJsonSerializer) lê direto.
-        File.WriteAllText(Path.Combine(filesRoot, ManifestFileName), BuildManifest(programs), new System.Text.UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(filesRoot, ManifestFileName), BuildManifest(programs, layout), new System.Text.UTF8Encoding(false));
     }
 }

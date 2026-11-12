@@ -21,6 +21,15 @@ com os arquivos que você quiser dentro, acessíveis no WinPE. Ele também baixa
 - Se existir `startup.cmd` na pasta, ele é executado automaticamente.
 
 ## Programas com ícone (desktop e menu Iniciar)
+### Editor visual (recomendado)
+No grupo **6** clique em **Abrir editor visual…**. Ele mostra a tela do WinPE como vai ficar (área de trabalho, barra de tarefas e menu Iniciar), **sem executar nada**:
+- **Arraste** os ícones para onde quiser (grade de 80 px; tela de referência 1024x768). Soltar sobre outro ícone **troca de lugar**; soltar um programa **sobre uma pasta** coloca-o dentro dela.
+- **Adicionar:** botões *Adicionar programa…* / *Adicionar pasta de programas…*, ou arraste `.exe` e pastas do Explorer direto para a tela. Arrastar um programa da lista para a tela o coloca na área de trabalho.
+- **Duplo clique** num programa edita; numa pasta abre a janela dela (dá para arrastar de lá para fora). **Botão direito**: editar, colocar em pasta nova, tirar da pasta, remover. **Delete** remove, **F2** renomeia pasta.
+- Clique em **Iniciar** para ver o menu por categoria exatamente como será.
+- **Gravar** aplica as mudanças; **Descartar** (ou fechar a janela e escolher "Não") joga tudo fora. As posições são salvas e usadas pelo launcher no WinPE.
+
+### Pelos botões da lista
 No grupo **6. Programas no WinPE** clique em *Adicionar…*, escolha o `.exe`, o nome, a **categoria** (vira um submenu no Iniciar) e onde
 aparece (área de trabalho e/ou menu Iniciar). Os programas são copiados para `\Arquivos\Programas\<id>` na mídia (não usam RAM; com
 "copiar a pasta inteira" os arquivos vizinhos vão junto, necessário para programas portáteis).

@@ -18,6 +18,24 @@ namespace WinPEBuilder.Launcher.Model
 
         [DataMember(Name = "programs")]
         public List<ProgramItem> Programs { get; set; }
+
+        /// <summary>Posição de cada ícone da área de trabalho (opcional; vazio = arrumação automática).</summary>
+        [DataMember(Name = "layout")]
+        public List<LayoutEntry> Layout { get; set; }
+    }
+
+    /// <summary>Posição de um ícone na grade da área de trabalho. key = "p:&lt;id&gt;" (programa) ou "f:&lt;NOME EM MAIÚSCULAS&gt;" (pasta).</summary>
+    [DataContract]
+    public class LayoutEntry
+    {
+        [DataMember(Name = "key")]
+        public string Key { get; set; }
+
+        [DataMember(Name = "col")]
+        public int Col { get; set; }
+
+        [DataMember(Name = "row")]
+        public int Row { get; set; }
     }
 
     [DataContract]
@@ -104,6 +122,9 @@ namespace WinPEBuilder.Launcher.Model
             }
 
             manifest.Programs = valid;
+            manifest.Layout = (manifest.Layout ?? new List<LayoutEntry>())
+                .Where(l => l != null && !string.IsNullOrEmpty(l.Key) && l.Col >= 0 && l.Row >= 0)
+                .ToList();
             return manifest;
         }
 
@@ -149,6 +170,45 @@ namespace WinPEBuilder.Launcher.Model
                     g.Key,
                     g.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList()))
                 .ToList();
+        }
+
+        public const int CellSize = 80;
+
+        public static string ProgramKey(ProgramItem program)
+        {
+            return "p:" + program.Id;
+        }
+
+        public static string FolderKey(string folderName)
+        {
+            return "f:" + (folderName ?? string.Empty).Trim().ToUpperInvariant();
+        }
+
+        /// <summary>
+        /// Posição (em pixels) de cada chave que tem entrada no layout; chaves sem entrada ficam de fora. Se alguma chave
+        /// pedida não tiver posição, devolve null (o chamador usa a arrumação automática para todos).
+        /// </summary>
+        public static Dictionary<string, System.Drawing.Point> PixelPositions(IEnumerable<LayoutEntry> layout, IEnumerable<string> keys)
+        {
+            var byKey = new Dictionary<string, LayoutEntry>(StringComparer.Ordinal);
+            foreach (var entry in layout)
+            {
+                byKey[entry.Key] = entry;
+            }
+
+            var result = new Dictionary<string, System.Drawing.Point>(StringComparer.Ordinal);
+            foreach (var key in keys)
+            {
+                LayoutEntry entry;
+                if (!byKey.TryGetValue(key, out entry))
+                {
+                    return null;
+                }
+
+                result[key] = new System.Drawing.Point(entry.Col * CellSize, entry.Row * CellSize);
+            }
+
+            return result;
         }
 
         public static List<ProgramItem> ForDesktop(IEnumerable<ProgramItem> programs)
