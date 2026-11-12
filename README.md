@@ -31,6 +31,12 @@ aparece (área de trabalho e/ou menu Iniciar). Os programas são copiados para `
 - Testar o launcher no Windows comum: `WinPELauncher.exe --preview --manifest "C:\...\Arquivos\programs.json"` (janela normal; não desliga nada).
 - Se o launcher falhar dentro do WinPE, o `startnet.cmd` continua e você tem o prompt de comando; o log fica em `X:\Windows\Temp\WinPELauncher.log`.
 
+### Adicionar uma pasta com vários programas
+*Adicionar pasta…* lista os `.exe` da pasta (até 3 níveis; desinstaladores e instaladores de runtime são ignorados). Para cada um você
+marca **Incluir**, **Menu Iniciar** e/ou **Área de trabalho** e ajusta o nome; os botões do topo marcam todos de uma vez.
+Opcionalmente marque *Colocar esta pasta na área de trabalho*: aparece um ícone de pasta que abre uma janela com todos os programas marcados.
+A pasta é copiada **uma única vez** para a mídia, mesmo com vários programas dela. Em *Editar* dá para mudar o nome da pasta do desktop de qualquer programa.
+
 ## 32 bits (x86)
 A Microsoft removeu o WinPE x86 do ADK moderno. A última versão com ele é o **ADK do Windows 10 2004**; o app instala esse ADK
 numa pasta própria (`%LOCALAPPDATA%\WinPEBuilder\adk`). Alternativa: usar a origem *boot.wim de uma ISO* com uma ISO do Windows 32 bits.

@@ -128,7 +128,8 @@
                             </ListView.View>
                         </ListView>
                         <WrapPanel Margin="0,6,0,0">
-                            <Button x:Name="ProgramAddButton" Content="Adicionar…" Click="ProgramAddButton_Click"/>
+                            <Button x:Name="ProgramAddButton" Content="Adicionar programa…" Click="ProgramAddButton_Click"/>
+                            <Button x:Name="ProgramAddFolderButton" Content="Adicionar pasta…" Click="ProgramAddFolderButton_Click"/>
                             <Button x:Name="ProgramEditButton" Content="Editar…" IsEnabled="False" Click="ProgramEditButton_Click"/>
                             <Button x:Name="ProgramRemoveButton" Content="Remover" IsEnabled="False" Click="ProgramRemoveButton_Click"/>
                         </WrapPanel>

@@ -43,6 +43,18 @@ namespace WinPEBuilder.Launcher
 
             var images = new ImageList { ImageSize = new Size(32, 32), ColorDepth = ColorDepth.Depth32Bit };
             _icons.LargeImageList = images;
+            // Pastas primeiro (como no Explorer), depois os programas soltos.
+            foreach (var group in ManifestReader.DesktopFolders(programs))
+            {
+                images.Images.Add(FolderIcon.Create(32));
+                var folder = new DesktopFolder(group.Key, group.Value);
+                _icons.Items.Add(new ListViewItem(group.Key, images.Images.Count - 1)
+                {
+                    Tag = folder,
+                    ToolTipText = group.Value.Count + " programa(s)",
+                });
+            }
+
             foreach (var program in ManifestReader.ForDesktop(programs))
             {
                 images.Images.Add(ProgramRunner.LoadIcon(runner.ExePath(program), 32));
@@ -51,10 +63,20 @@ namespace WinPEBuilder.Launcher
 
             _icons.ItemActivate += (s, e) =>
             {
-                if (_icons.SelectedItems.Count > 0)
+                if (_icons.SelectedItems.Count == 0)
                 {
-                    _taskbar.Launch((ProgramItem)_icons.SelectedItems[0].Tag);
+                    return;
                 }
+
+                var tag = _icons.SelectedItems[0].Tag;
+                var item = tag as ProgramItem;
+                if (item != null)
+                {
+                    _taskbar.Launch(item);
+                    return;
+                }
+
+                OpenFolder((DesktopFolder)tag, runner);
             };
 
             Controls.Add(_icons);
@@ -99,6 +121,24 @@ namespace WinPEBuilder.Launcher
                 Native.SetWorkArea(usable);
                 Activated += (s, e) => Native.SendToBottom(Handle);
             }
+        }
+
+        private readonly Dictionary<string, FolderForm> _openFolders = new Dictionary<string, FolderForm>(StringComparer.CurrentCultureIgnoreCase);
+
+        /// <summary>Abre (ou traz para frente) a janela de uma pasta da área de trabalho.</summary>
+        private void OpenFolder(DesktopFolder folder, ProgramRunner runner)
+        {
+            FolderForm window;
+            if (_openFolders.TryGetValue(folder.Name, out window) && !window.IsDisposed)
+            {
+                window.Activate();
+                return;
+            }
+
+            window = new FolderForm(folder, runner, p => _taskbar.Launch(p));
+            window.FormClosed += (s, e) => _openFolders.Remove(folder.Name);
+            _openFolders[folder.Name] = window;
+            window.Show();
         }
 
         protected override void OnShown(EventArgs e)

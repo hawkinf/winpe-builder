@@ -40,6 +40,7 @@ public partial class ProgramWindow : Window
             _nameEditedByUser = true;
             CategoryBox.Text = existing.Category;
             ArgumentsBox.Text = existing.Arguments;
+            DesktopFolderBox.Text = existing.DesktopFolder;
             DesktopCheck.IsChecked = existing.ShowOnDesktop;
             StartMenuCheck.IsChecked = existing.ShowInStartMenu;
             CopyFolderCheck.IsChecked = existing.CopyFolder;
@@ -111,6 +112,7 @@ public partial class ProgramWindow : Window
         var version = ++_sizeVersion;
         var path = ExeBox.Text.Trim();
         var copyFolder = CopyFolderCheck.IsChecked == true;
+        var root = File.Exists(path) ? SafeRoot(path) : string.Empty;
         if (!File.Exists(path))
         {
             SizeText.Text = string.Empty;
@@ -121,7 +123,7 @@ public partial class ProgramWindow : Window
         string text;
         try
         {
-            text = await Task.Run(() => DescribeSize(path, copyFolder));
+            text = await Task.Run(() => DescribeSize(path, copyFolder, root));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
@@ -134,9 +136,9 @@ public partial class ProgramWindow : Window
         }
     }
 
-    private static string DescribeSize(string path, bool copyFolder)
+    private static string DescribeSize(string path, bool copyFolder, string root)
     {
-        var entry = new ProgramEntry { Name = "x", SourceExe = path, CopyFolder = copyFolder };
+        var entry = new ProgramEntry { Name = "x", SourceExe = path, CopyFolder = copyFolder, SourceRoot = root };
         if (copyFolder && ProgramEntry.IsProtectedFolder(entry.SourceFolder))
         {
             return "⚠ Esta pasta é do sistema/perfil: copiar tudo traria arquivos demais. Desmarque \"copiar a pasta inteira\" ou mova o programa para uma pasta própria.";
@@ -145,6 +147,34 @@ public partial class ProgramWindow : Window
         var mb = ProgramStaging.TotalBytes([entry]) / (1024.0 * 1024);
         var text = $"Será copiado: {mb:0.#} MB.";
         return mb > 500 ? text + " ⚠ Grande: a ISO vai crescer bastante." : text;
+    }
+
+    private string SafeRoot(string exePath)
+    {
+        try
+        {
+            return KeepRootFor(exePath);
+        }
+        catch (ArgumentException)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>Mantém a raiz da importação de pasta enquanto o executável continuar dentro dela.</summary>
+    private string KeepRoot() => KeepRootFor(ExeBox.Text.Trim());
+
+    private string KeepRootFor(string exePath)
+    {
+        var root = _existing?.SourceRoot ?? string.Empty;
+        if (root.Length == 0 || CopyFolderCheck.IsChecked != true)
+        {
+            return string.Empty;
+        }
+
+        var exe = Path.GetFullPath(exePath);
+        var rootPrefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return exe.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) ? root : string.Empty;
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
@@ -158,14 +188,16 @@ public partial class ProgramWindow : Window
             SourceExe = ExeBox.Text.Trim(),
             Arguments = ArgumentsBox.Text.Trim(),
             CopyFolder = CopyFolderCheck.IsChecked == true,
+            SourceRoot = KeepRoot(),
+            DesktopFolder = DesktopFolderBox.Text.Trim(),
             ShowOnDesktop = DesktopCheck.IsChecked == true,
             ShowInStartMenu = StartMenuCheck.IsChecked == true,
         };
 
         var errors = ProgramEntry.Validate([entry]).ToList();
-        if (!entry.ShowOnDesktop && !entry.ShowInStartMenu)
+        if (!entry.ShowOnDesktop && !entry.ShowInStartMenu && entry.DesktopFolder.Length == 0)
         {
-            errors.Add("Marque pelo menos um lugar: área de trabalho ou menu Iniciar.");
+            errors.Add("Marque pelo menos um lugar: área de trabalho, menu Iniciar ou uma pasta da área de trabalho.");
         }
 
         if (errors.Count > 0)

@@ -44,6 +44,10 @@ namespace WinPEBuilder.Launcher.Model
 
         [DataMember(Name = "startMenu")]
         public bool StartMenu { get; set; }
+
+        /// <summary>Nome da pasta da área de trabalho a que pertence (vazio = nenhuma). Campo opcional do manifesto v1.</summary>
+        [DataMember(Name = "folder")]
+        public string Folder { get; set; }
     }
 
     /// <summary>Lê e interpreta o programs.json. Sem dependências além do .NET Framework (roda no WinPE).</summary>
@@ -95,6 +99,8 @@ namespace WinPEBuilder.Launcher.Model
                 {
                     p.Arguments = string.Empty;
                 }
+
+                p.Folder = (p.Folder ?? string.Empty).Trim();
             }
 
             manifest.Programs = valid;
@@ -148,6 +154,19 @@ namespace WinPEBuilder.Launcher.Model
         public static List<ProgramItem> ForDesktop(IEnumerable<ProgramItem> programs)
         {
             return programs.Where(p => p.Desktop).OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        /// <summary>Pastas da área de trabalho: programas agrupados pelo campo folder (ordem alfabética; vazias não aparecem).</summary>
+        public static List<KeyValuePair<string, List<ProgramItem>>> DesktopFolders(IEnumerable<ProgramItem> programs)
+        {
+            return programs
+                .Where(p => !string.IsNullOrEmpty(p.Folder))
+                .GroupBy(p => p.Folder, StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new KeyValuePair<string, List<ProgramItem>>(
+                    g.Key,
+                    g.OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase).ToList()))
+                .ToList();
         }
 
         /// <summary>

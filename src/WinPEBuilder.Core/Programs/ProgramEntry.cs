@@ -29,6 +29,18 @@ public sealed record ProgramEntry
 
     public bool ShowInStartMenu { get; init; } = true;
 
+    /// <summary>
+    /// Pasta raiz escolhida pelo usuário quando o programa veio de "Adicionar pasta" (o exe pode estar numa subpasta).
+    /// Vazio = a pasta do próprio executável. Só vale com <see cref="CopyFolder"/>.
+    /// </summary>
+    public string SourceRoot { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Nome de uma pasta que aparece na área de trabalho e abre uma janela com os programas que têm o mesmo nome.
+    /// Vazio = o programa não pertence a nenhuma pasta da área de trabalho.
+    /// </summary>
+    public string DesktopFolder { get; init; } = string.Empty;
+
     public const string DefaultCategory = "Programas";
 
     private static readonly string[] AllowedExtensions = [".exe", ".cmd", ".bat", ".com"];
@@ -37,7 +49,14 @@ public sealed record ProgramEntry
 
     /// <summary>Pasta de origem que será copiada.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
-    public string SourceFolder => Path.GetDirectoryName(Path.GetFullPath(SourceExe))!;
+    public string SourceFolder => !CopyFolder || string.IsNullOrWhiteSpace(SourceRoot)
+        ? Path.GetDirectoryName(Path.GetFullPath(SourceExe))!
+        : Path.GetFullPath(SourceRoot).TrimEnd(Path.DirectorySeparatorChar);
+
+    /// <summary>true se o executável está dentro de <see cref="SourceFolder"/> (sempre, exceto raiz mal informada).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ExeIsInsideSourceFolder =>
+        Path.GetFullPath(SourceExe).StartsWith(SourceFolder.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Gera um id único a partir do nome ("HWiNFO 64" → "hwinfo-64").</summary>
     public static string MakeId(string name, IEnumerable<string> existingIds)
@@ -127,6 +146,17 @@ public sealed record ProgramEntry
             if (!AllowedExtensions.Contains(Path.GetExtension(p.SourceExe), StringComparer.OrdinalIgnoreCase))
             {
                 errors.Add($"Programa \"{label}\": só são aceitos {string.Join(", ", AllowedExtensions)}.");
+            }
+
+            if ((p.DesktopFolder?.Length ?? 0) > 40 || (p.DesktopFolder ?? string.Empty).Any(char.IsControl))
+            {
+                errors.Add($"Programa \"{label}\": o nome da pasta da área de trabalho deve ter até 40 caracteres.");
+            }
+
+            if (p.CopyFolder && !p.ExeIsInsideSourceFolder)
+            {
+                errors.Add($"Programa \"{label}\": o executável precisa estar dentro da pasta {p.SourceFolder}.");
+                continue;
             }
 
             if (p.CopyFolder && IsProtectedFolder(p.SourceFolder))

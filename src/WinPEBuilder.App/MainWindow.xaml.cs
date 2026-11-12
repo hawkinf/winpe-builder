@@ -237,12 +237,26 @@ public partial class MainWindow : Window
 
     private sealed record ProgramRow(string Name, string Category, string Where, string File);
 
-    private static string DescribeWhere(ProgramEntry p) => (p.ShowOnDesktop, p.ShowInStartMenu) switch
+    private static string DescribeWhere(ProgramEntry p)
     {
-        (true, true) => "Desktop + Iniciar",
-        (true, false) => "Desktop",
-        _ => "Menu Iniciar",
-    };
+        var places = new List<string>();
+        if (p.ShowOnDesktop)
+        {
+            places.Add("Desktop");
+        }
+
+        if (p.ShowInStartMenu)
+        {
+            places.Add("Iniciar");
+        }
+
+        if (!string.IsNullOrEmpty(p.DesktopFolder))
+        {
+            places.Add($"Pasta \"{p.DesktopFolder}\"");
+        }
+
+        return string.Join(" + ", places);
+    }
 
     private void RefreshPrograms(int selectIndex = -1)
     {
@@ -329,6 +343,16 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true && dialog.Result is not null)
         {
             _programs.Add(dialog.Result);
+            RefreshPrograms(_programs.Count - 1);
+        }
+    }
+
+    private void ProgramAddFolderButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new FolderImportWindow(_programs.Select(p => p.Id)) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Results.Count > 0)
+        {
+            _programs.AddRange(dialog.Results);
             RefreshPrograms(_programs.Count - 1);
         }
     }

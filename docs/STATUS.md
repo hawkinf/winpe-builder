@@ -23,6 +23,7 @@ Programa GUI em C# que baixa/obtém os arquivos essenciais do WinPE (x86/x64), i
 | Programas no WinPE — passo A1: modelo + manifesto + cópia no build (`Core/Programs`) | ✅ | 74 testes ok; ainda SEM tela no app e SEM launcher |
 | Programas no WinPE — A2 tela "Programas" (ProgramWindow + grupo 6, persistência em settings.json) | ✅ | janela renderizada e conferida por captura; fluxo clicar-adicionar não automatizado |
 | Programas no WinPE — A3 launcher (`src/WinPEBuilder.Launcher`, WinForms net48: desktop, barra, Iniciar por categoria) | ✅ | testado no Windows comum com `--preview` (ícones extraídos OK); DENTRO do WinPE real NÃO testado |
+| Programas no WinPE — "Adicionar pasta" (vários .exe, Iniciar/Desktop por programa, pasta na área de trabalho, cópia única) | ✅ | 116 testes ok; janela conferida (harness) e launcher conferido com pasta+janela; ISO real NÃO gerada |
 | Programas no WinPE — A4 injeção (exe em System32, WinPE-NetFx automático, startnet inicia o launcher) | ✅ | 101 testes ok com runner simulado; boot real NÃO testado |
 | WinPEBuilder: GUI completa (config, build, log em arquivo, cancelar, pendrive com confirmação digitada, settings.json) | ✅ | passo 7; 52 testes ok; janela abre e renderiza (screenshot), fechar grava settings; fluxo de geração real via GUI NÃO exercitado (exige admin) |
 
@@ -41,7 +42,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 - Testar 32 bits: instalação do ADK 2004 em pasta privada e/ou origem boot.wim de ISO x86 — responsável: dono do projeto
 - Validar numa VM: gerar ISO x64 com programas, conferir se o launcher sobe no WinPE (WinForms depende de WinPE-NetFx; fontes/ícones podem variar), clicar nos programas e Reiniciar/Desligar — responsável: dono do projeto
 - Launcher: se o WinForms não subir no WinPE real, plano B = trocar por HTA/PowerShell ou usar winpeshl.ini; o log fica em X:\Windows\Temp\WinPELauncher.log
-- Ideias futuras: injeção de drivers, vários idiomas, publicar binário (self-contained), dedupe quando 2 programas vêm da mesma pasta — qualquer IA
+- Ideias futuras: injeção de drivers, vários idiomas, subpastas aninhadas na janela de pasta do desktop, reordenar ícones — qualquer IA
 - Gravação em pendrive nunca foi executada de verdade (formata o disco): testar primeiro com um pendrive vazio — responsável: dono do projeto
 - Validar uma geração REAL (x64 via ADK) com o app elevado; só foi testado com runner simulado — responsável: dono do projeto
 - Instalação real do ADK (x64 e x86 em pasta privada via /installpath) ainda não foi exercitada; o instalador pode recusar o ADK 2004 se houver ADK mais novo — fallback: boot.wim de ISO 32 bits (passo 4)
@@ -53,6 +54,7 @@ dotnet build src/WinPEBuilder.sln ; dotnet test src/WinPEBuilder.sln
 4. Atualize este arquivo e commite junto com a mudança.
 
 ## Log (mais recente primeiro; acrescente uma linha por tarefa)
+- 2026-11-12 — Claude Code — "Adicionar pasta": ProgramScanner, SourceRoot/DesktopFolder, cópia única por pasta (StageFolderName), campo folder no manifesto, FolderImportWindow, ícone/janela de pasta no launcher. Validar: dotnet test src/WinPEBuilder.sln (116 ok); `WinPELauncher.exe --preview --manifest <programs.json com "folder">` e duplo clique na pasta.
 - 2026-11-12 — Claude Code — correção do publish (NETSDK1005/1047): GlobalPropertiesToRemove no ProjectReference do launcher, RuntimeIdentifiers no Launcher, alvo PublishLauncher (launcher\ na pasta publicada, também em single-file). Validar: `dotnet publish src/WinPEBuilder.App -c Release -r win-x64 -o <pasta>` e conferir `<pasta>\launcher\WinPELauncher.exe` (testado x64, x86, self-contained+single-file; Launcher sozinho também publica).
 - 2026-11-12 — Claude Code — passos A2+A3+A4 (programas com ícone): tela Programas (ProgramWindow, UserSettings.Programs), projeto Launcher net48 (desktop/barra/Iniciar), injeção na imagem (BuildOptions.InstallLauncher/EffectiveComponents, StartnetScript launcher, CopyLauncher no App). Validar: dotnet test src/WinPEBuilder.sln (101 ok) e `WinPELauncher.exe --preview --manifest <programs.json>`.
 - 2026-11-11 — Claude Code — correção de docs: barras invertidas perdidas em linhas do STATUS (passo 5 e A1/A2–A4).
