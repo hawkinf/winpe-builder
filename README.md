@@ -1,67 +1,129 @@
 # WinPE Builder
 
-Programa com interface gráfica (C#, .NET 10, WPF) que gera uma **ISO de WinPE** (32 ou 64 bits, boot BIOS + UEFI)
-com os arquivos que você quiser dentro, acessíveis no WinPE. Ele também baixa e instala o que for preciso
-(Windows ADK + WinPE add-on) direto dos servidores da Microsoft.
+Programa com interface gráfica (C#, .NET 10, WPF) que **gera uma ISO de WinPE** — 32 ou 64 bits, boot BIOS + UEFI — com os seus
+arquivos e programas dentro. Ele baixa e instala sozinho o que for preciso (Windows ADK + WinPE add-on, direto da Microsoft) e inclui um
+**editor visual**: você monta, arrastando, a área de trabalho e o menu Iniciar que vão aparecer no WinPE, com ícones de verdade.
 
-> Este repositório também contém o antigo "WinPE Test Lab" (PhoenixPE/PEBakery) em `scripts/`, `config/` e `tools/`.
+> **English summary:** WinPE Builder is a Windows GUI (C#/.NET 10/WPF) that builds bootable WinPE ISOs (x86/x64, BIOS+UEFI),
+> fetches the Windows ADK for you, injects your files, and ships a tiny WinForms shell (desktop icons, taskbar, Start menu, wallpaper)
+> that you design visually with drag and drop. The UI and docs are in Brazilian Portuguese.
+
+![Editor visual: área de trabalho do WinPE com pasta aberta](docs/img/editor-visual.png)
+
+## Recursos
+
+- **Gera a ISO completa:** `copype` → monta o `boot.wim` → pacotes opcionais → teclado → `oscdimg` (BIOS + UEFI). Também grava em **pendrive**.
+- **Cuida dos requisitos:** detecta o Windows ADK / WinPE add-on e instala (com verificação de assinatura da Microsoft) se faltar.
+- **32 e 64 bits.** O ADK atual não tem WinPE x86; o app usa o ADK do Windows 10 2004 ou o `boot.wim` de uma ISO do Windows 32 bits.
+- **Pacotes opcionais:** PowerShell, .NET Framework, WMI, scripts, cmdlets de armazenamento/DISM, BitLocker e outros (dependências automáticas).
+- **Seus arquivos no WinPE:** pasta mapeada como `Z:` e `%ARQUIVOS%`, com `startup.cmd` opcional que roda sozinho.
+- **Programas com ícone** (desktop e menu Iniciar), por um launcher próprio que roda dentro do WinPE.
+- **Editor visual** com *preview* fiel, sem executar nada: arrastar, adicionar, remover, **gravar ou descartar**.
+- Pastas e **subpastas** na área de trabalho, **ordem manual** do menu Iniciar e **papel de parede** (imagem ou cor).
+
+## Editor visual
+
+No grupo **Programas no WinPE**, clique em **Abrir editor visual…**.
+
+- **Mover:** arraste os ícones (grade de 80 px; tela de referência 1024×768). Soltar sobre outro ícone **troca de lugar**; soltar um programa
+  **sobre uma pasta** coloca-o dentro dela.
+- **Adicionar:** pelos botões, ou **arrastando `.exe` e pastas do Explorer** direto para a tela. *Adicionar pasta de programas* lista os
+  `.exe` da pasta (ignora desinstaladores), deixa marcar para cada um *menu Iniciar* e/ou *área de trabalho* e copia a pasta uma única vez.
+- **Editar / remover:** duplo clique edita (numa pasta, abre a janela dela); botão direito oferece editar, colocar em pasta nova, tirar da
+  pasta e remover; `Delete` remove, `F2` renomeia pasta.
+- **Subpastas:** use `/` no nome da pasta (ex.: `Ferramentas/Discos`, até 4 níveis). Dentro da janela da pasta, duplo clique entra e `..` volta.
+- **Menu Iniciar:** clique em *Iniciar* para ver o menu como será. Na aba **Menu Iniciar** reordene categorias e programas
+  (Subir/Descer ou arrastando; soltar um programa em outra categoria muda a categoria dele).
+- **Papel de parede:** JPG/PNG/BMP (até 25 MB) em Preencher, Ajustar, Esticar, Centralizar ou Lado a lado, mais a cor de fundo.
+- **Gravar** aplica tudo; **Descartar** (ou fechar e escolher "Não") joga tudo fora — o editor trabalha numa cópia.
+
+![Aba Menu Iniciar e subpastas](docs/img/editor-menu-iniciar.png)
+
+![Escolha do papel de parede com preview](docs/img/papel-de-parede.png)
 
 ## Como usar
+
 1. Abra `WinPEBuilder.exe` (pede administrador: o DISM precisa para montar o `boot.wim`).
-2. **Requisitos**: se faltar algo, use *Instalar ADK (64 bits)* ou *Instalar ADK Win10 2004 (32 bits)*.
-3. Escolha **arquitetura** e **origem**:
-   - *WinPE oficial do ADK* (recomendado; permite pacotes opcionais como PowerShell, .NET, WMI…);
-   - *boot.wim de uma ISO do Windows* (útil para 32 bits sem o ADK antigo; WinPE básico).
-4. Marque os **pacotes opcionais**, o **teclado** (padrão pt-BR) e, se quiser, a **pasta de arquivos**.
-5. Escolha onde salvar a ISO e clique **Gerar ISO**. Depois, opcionalmente, **Gravar em pendrive** (formata o pendrive!).
+2. **Requisitos:** se faltar algo, use *Instalar ADK (64 bits)* ou *Instalar ADK Win10 2004 (32 bits)*.
+3. Escolha a **arquitetura** e a **origem**: *WinPE oficial do ADK* (recomendado, aceita pacotes opcionais e o launcher) ou *boot.wim de uma ISO
+   do Windows* (útil para 32 bits; WinPE básico, sem .NET).
+4. Marque os **pacotes opcionais**, o **teclado** (padrão pt-BR) e, se quiser, a **pasta de arquivos** e os **programas**.
+5. Escolha onde salvar a ISO e clique em **Gerar ISO**. Depois, se quiser, **Gravar em pendrive** (formata o pendrive).
 
-## Seus arquivos dentro do WinPE
-- **Na ISO** (recomendado): ficam em `\Arquivos` na mídia; não ocupam RAM. **Dentro da imagem**: ficam em `X:\Arquivos` (RAM, até 1 GB).
-- Ao iniciar, o WinPE mapeia a pasta como unidade **`Z:`** e define a variável **`%ARQUIVOS%`**.
-- Se existir `startup.cmd` na pasta, ele é executado automaticamente.
+### Seus arquivos dentro do WinPE
 
-## Programas com ícone (desktop e menu Iniciar)
-### Editor visual (recomendado)
-No grupo **6** clique em **Abrir editor visual…**. Ele mostra a tela do WinPE como vai ficar (área de trabalho, barra de tarefas e menu Iniciar), **sem executar nada**:
-- **Arraste** os ícones para onde quiser (grade de 80 px; tela de referência 1024x768). Soltar sobre outro ícone **troca de lugar**; soltar um programa **sobre uma pasta** coloca-o dentro dela.
-- **Adicionar:** botões *Adicionar programa…* / *Adicionar pasta de programas…*, ou arraste `.exe` e pastas do Explorer direto para a tela. Arrastar um programa da lista para a tela o coloca na área de trabalho.
-- **Duplo clique** num programa edita; numa pasta abre a janela dela (dá para arrastar de lá para fora). **Botão direito**: editar, colocar em pasta nova, tirar da pasta, remover. **Delete** remove, **F2** renomeia pasta.
-- **Papel de parede:** botão *Papel de parede…* (aba Programas do editor): imagem JPG/PNG/BMP (até 25 MB) com modo Preencher, Ajustar, Esticar, Centralizar ou Lado a lado, e a cor de fundo (`#RRGGBB`, com amostras prontas). O preview usa a mesma conta do launcher. A imagem é copiada para a mídia (`Arquivos\wallpaper.*`).
-- **Subpastas:** no campo *Pasta no desktop* use `/` (ex.: `Ferramentas/Discos`, até 4 níveis). Dentro da janela de uma pasta há subpastas (duplo clique abre, `..` volta); arraste programas e pastas sobre elas para reorganizar; botão direito cria subpasta, renomeia, sobe um nível ou desfaz.
-- Clique em **Iniciar** para ver o menu por categoria exatamente como será. Na aba **Menu Iniciar** do painel direito dá para **reordenar à mão** categorias e programas (Subir/Descer ou arrastar; soltar um programa sobre outra categoria muda a categoria dele).
-- **Gravar** aplica as mudanças; **Descartar** (ou fechar a janela e escolher "Não") joga tudo fora. As posições são salvas e usadas pelo launcher no WinPE.
+- **Na ISO** (recomendado): ficam em `\Arquivos` na mídia e não ocupam RAM. **Dentro da imagem**: ficam em `X:\Arquivos` (RAM, até 1 GB).
+- Ao iniciar, o WinPE mapeia a pasta como **`Z:`** e define **`%ARQUIVOS%`**. Se houver `startup.cmd` nela, ele é executado.
 
-### Pelos botões da lista
-No grupo **6. Programas no WinPE** clique em *Adicionar…*, escolha o `.exe`, o nome, a **categoria** (vira um submenu no Iniciar) e onde
-aparece (área de trabalho e/ou menu Iniciar). Os programas são copiados para `\Arquivos\Programas\<id>` na mídia (não usam RAM; com
-"copiar a pasta inteira" os arquivos vizinhos vão junto, necessário para programas portáteis).
-- Dentro do WinPE roda o **WinPE Launcher** (`WinPELauncher.exe`, WinForms/.NET Framework 4.8): ícones extraídos dos próprios `.exe`,
-  barra de tarefas com os programas abertos e relógio, menu **Iniciar** por categoria, Prompt de comando, PowerShell, Reiniciar e Desligar.
-- O launcher precisa do pacote **.NET Framework** do WinPE: é adicionado sozinho e só existe com a origem **ADK**. Com a origem
-  *boot.wim de uma ISO* os programas são copiados (em `Z:\Programas`) mas o desktop/menu não aparecem.
-- Testar o launcher no Windows comum: `WinPELauncher.exe --preview --manifest "C:\...\Arquivos\programs.json"` (janela normal; não desliga nada).
-- Se o launcher falhar dentro do WinPE, o `startnet.cmd` continua e você tem o prompt de comando; o log fica em `X:\Windows\Temp\WinPELauncher.log`.
+### Programas, launcher e .NET
 
-### Adicionar uma pasta com vários programas
-*Adicionar pasta…* lista os `.exe` da pasta (até 3 níveis; desinstaladores e instaladores de runtime são ignorados). Para cada um você
-marca **Incluir**, **Menu Iniciar** e/ou **Área de trabalho** e ajusta o nome; os botões do topo marcam todos de uma vez.
-Opcionalmente marque *Colocar esta pasta na área de trabalho*: aparece um ícone de pasta que abre uma janela com todos os programas marcados.
-A pasta é copiada **uma única vez** para a mídia, mesmo com vários programas dela. Em *Editar* dá para mudar o nome da pasta do desktop de qualquer programa.
+Os programas são copiados para `Arquivos\Programas\<id>` e descritos em `Arquivos\programs.json`. Dentro do WinPE roda o **WinPE Launcher**
+(WinForms, .NET Framework 4.8): ícones extraídos dos próprios `.exe`, barra de tarefas com relógio e programas abertos, menu Iniciar por
+categoria, Prompt de comando, PowerShell, Reiniciar e Desligar. Ele precisa do pacote **.NET Framework** do WinPE, que o app adiciona sozinho e
+que só existe com a origem **ADK**. Com a origem *boot.wim de ISO* os programas são copiados (unidade `Z:`), mas sem desktop/menu.
+
+Testar o launcher no Windows comum (janela normal; não desliga nada):
+
+```powershell
+WinPELauncher.exe --preview --manifest "C:\caminho\Arquivos\programs.json"
+```
 
 ## 32 bits (x86)
-A Microsoft removeu o WinPE x86 do ADK moderno. A última versão com ele é o **ADK do Windows 10 2004**; o app instala esse ADK
-numa pasta própria (`%LOCALAPPDATA%\WinPEBuilder\adk`). Alternativa: usar a origem *boot.wim de uma ISO* com uma ISO do Windows 32 bits.
 
-## Desenvolvimento
-```
+A Microsoft removeu o WinPE x86 do ADK moderno; a última versão com ele é o **ADK do Windows 10 2004**, que o app instala numa pasta própria
+(`%LOCALAPPDATA%\WinPEBuilder\adk`). Alternativa: origem *boot.wim de uma ISO* com uma ISO do Windows 32 bits.
+
+## Compilar, testar e publicar
+
+Requer o **.NET 10 SDK** no Windows (o launcher `net48` compila pelos pacotes de referência do NuGet, sem SDK extra).
+
+```powershell
 dotnet build src/WinPEBuilder.sln
-dotnet test  src/WinPEBuilder.sln
-```
-Executável: `src/WinPEBuilder.App/bin/Debug/net10.0-windows/WinPEBuilder.exe` (rode pelo Explorer ou de um terminal elevado;
-`dotnet run` de terminal comum falha por causa do manifesto de administrador). Dados do app: `%LOCALAPPDATA%\WinPEBuilder`
-(`settings.json`, `logs\`, `downloads\`, `work\`, `adk\`). Mapa do código: `docs/ARCHITECTURE.md`. Estado e pendências: `docs/STATUS.md`.
+dotnet test  src/WinPEBuilder.sln        # 230 testes (runner simulado; não mexem no sistema)
 
-## Estrutura
-- `src/` – solução C# (Core = lógica, App = GUI WPF, Launcher = desktop/menu que roda no WinPE (net48), Tests = xUnit)
-- `scripts/` – PowerShell do Test Lab (UIA/PEBakery), `check-handoff.ps1` e `make-icon.ps1` (gera o ícone do app)
-- `config/`, `tools/`, `build/`, `output/` – Test Lab (binários ignorados pelo git)
+# executável publicado (a pasta launcher\ vai junto automaticamente)
+dotnet publish src/WinPEBuilder.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
+```
+
+O app pede administrador pelo manifesto; `dotnet run` de um terminal comum falha por isso — abra o `.exe` pelo Explorer ou de um terminal elevado.
+Dados do app em `%LOCALAPPDATA%\WinPEBuilder` (`settings.json`, `logs\`, `downloads\`, `work\`, `adk\`).
+
+## Estrutura do repositório
+
+| Pasta | Conteúdo |
+|---|---|
+| `src/WinPEBuilder.Core` | Lógica (net10): ADK, montagem da ISO, pendrive, programas, layout/editor (`DesignerModel`), papel de parede |
+| `src/WinPEBuilder.App` | Interface WPF: janela principal, editor visual, diálogos |
+| `src/WinPEBuilder.Launcher` | Launcher que roda dentro do WinPE (WinForms, net48) |
+| `src/WinPEBuilder.Tests` | Testes xUnit (inclusive o contrato `programs.json` Core → launcher) |
+| `docs/` | `ARCHITECTURE.md` (mapa do código e armadilhas) e `STATUS.md` (estado, pendências, log) |
+| `scripts/`, `config/`, `tools/` | Utilitários e o antigo "WinPE Test Lab" (PhoenixPE/PEBakery; binários não são versionados) |
+
+## Estado e limitações (seja o primeiro a testar)
+
+O projeto foi desenvolvido com testes automatizados e verificação visual, mas **ainda não** foi validado de ponta a ponta numa máquina real:
+
+| Verificado | Ainda não verificado |
+|---|---|
+| 230 testes com runner simulado (pipeline de build, manifesto, editor, launcher) | Geração completa pela interface (copype + DISM) com administrador |
+| `oscdimg` real sobre a mídia do ADK (ISO com boot BIOS + UEFI conferido) | Boot da ISO numa VM e o launcher dentro de um WinPE real |
+| Interface, editor e launcher (`--preview`) vistos rodando no Windows | Gravação em pendrive (formata o disco) e instalação do ADK 2004 / WinPE x86 |
+
+Relate problemas com o log em `%LOCALAPPDATA%\WinPEBuilder\logs` (e, dentro do WinPE, `X:\Windows\Temp\WinPELauncher.log`).
+
+## Avisos
+
+- Este projeto **não é afiliado à Microsoft**. *Windows*, *WinPE* e *Windows ADK* são marcas e produtos da Microsoft. O app baixa o ADK dos
+  servidores da Microsoft e o instala em modo silencioso: usá-lo implica aceitar os termos de licença do Windows ADK.
+- Gravar em pendrive **apaga o disco escolhido**; o app só lista discos removíveis, confirma com a letra digitada e recusa o disco do Windows.
+- Os programas que você coloca no WinPE são de sua responsabilidade (licenças, origem confiável).
+
+## Desenvolvimento com IA e continuidade
+
+Este repositório segue um padrão de *handoff*: qualquer pessoa ou IA deve ler `AGENTS.md`, `docs/STATUS.md` e `docs/ARCHITECTURE.md` antes de
+mexer, e toda mudança de código atualiza `docs/STATUS.md` no mesmo commit (um hook e um workflow do GitHub conferem).
+Para ativar o hook localmente: `git config core.hooksPath .githooks`.
+
+## Licença
+
+Ainda não definida pelo autor — enquanto não houver um arquivo `LICENSE`, valem os direitos autorais padrão (todos os direitos reservados).
