@@ -365,6 +365,15 @@ public sealed class WinPeBuildService(
         Directory.CreateDirectory(system32);
         var script = StartnetScript.Build(run.Options.EffectiveFilesMode, run.Options.InstallLauncher);
         await File.WriteAllBytesAsync(Path.Combine(system32, "startnet.cmd"), StartnetScript.ToBytes(script), run.Ct).ConfigureAwait(false);
+        if (run.Options.InstallLauncher)
+        {
+            // O launcher vira o shell do WinPE (sem o prompt na tela). Fechar o shell reinicia o PC, por isso o cmd.exe fica
+            // como ultimo item: so aparece se o launcher terminar.
+            await File.WriteAllBytesAsync(
+                Path.Combine(system32, StartnetScript.WinpeshlFileName), StartnetScript.ToBytes(StartnetScript.BuildWinpeshlIni()), run.Ct).ConfigureAwait(false);
+            run.Log($"{StartnetScript.WinpeshlFileName} gravado: o launcher e o shell do WinPE (sem prompt na tela; se ele terminar, abre um prompt de comando).");
+        }
+
         run.Log($"startnet.cmd gravado. No WinPE a pasta fica em %ARQUIVOS% e na unidade {StartnetScript.DriveLetter}: ({StartnetScript.DriveLetter}:\\startup.cmd, se existir, roda sozinho).");
     }
 

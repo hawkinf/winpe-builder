@@ -187,22 +187,44 @@ public sealed class LauncherTests : IDisposable
     [Theory]
     [InlineData(FilesMode.OnIso)]
     [InlineData(FilesMode.InsideImage)]
-    public void Startnet_WithLauncher_StartsItBeforeUserStartup(FilesMode mode)
+    public void Startnet_WithLauncher_DoesNotStartIt_AndRunsUserStartupWithoutBlocking(FilesMode mode)
     {
         var script = StartnetScript.Build(mode, launcher: true);
 
-        var launcherAt = script.IndexOf("start \"\" \"%SystemRoot%\\System32\\WinPELauncher.exe\"", StringComparison.Ordinal);
-        var startupAt = script.IndexOf("startup.cmd", StringComparison.Ordinal);
-        Assert.True(launcherAt > 0);
-        Assert.True(launcherAt < startupAt);
-        Assert.True(script.IndexOf("ARQUIVOS=", StringComparison.Ordinal) < launcherAt); // %ARQUIVOS% já definido
+        // o launcher agora é iniciado pelo winpeshl.ini (como shell), não pelo startnet.cmd
+        Assert.DoesNotContain("WinPELauncher", script);
+        // startup.cmd do usuário numa janela própria: não bloqueia o início do launcher
+        Assert.Contains("start \"startup.cmd\" cmd.exe /c call Z:\\startup.cmd", script);
+        Assert.DoesNotContain("\r\nif exist Z:\\startup.cmd call ", script);
+        Assert.True(script.IndexOf("ARQUIVOS=", StringComparison.Ordinal) < script.IndexOf("startup.cmd", StringComparison.Ordinal));
         Assert.Equal(script, Encoding.ASCII.GetString(StartnetScript.ToBytes(script))); // só ASCII
         Assert.EndsWith("\r\n", script);
     }
 
+    [Theory]
+    [InlineData(FilesMode.OnIso)]
+    [InlineData(FilesMode.InsideImage)]
+    public void Startnet_WithoutLauncher_KeepsBlockingStartupCall(FilesMode mode) =>
+        Assert.Contains("if exist Z:\\startup.cmd call Z:\\startup.cmd", StartnetScript.Build(mode, launcher: false));
+
     [Fact]
-    public void Startnet_LauncherWithNoFiles_StillStartsLauncher() =>
-        Assert.Contains("WinPELauncher.exe", StartnetScript.Build(FilesMode.None, launcher: true));
+    public void Startnet_LauncherWithNoFiles_IsJustWpeinit() =>
+        Assert.Equal("@echo off\r\nwpeinit\r\n", StartnetScript.Build(FilesMode.None, launcher: true));
+
+    [Fact]
+    public void Winpeshl_RunsStartnetThenLauncherThenFallbackPrompt_AsciiCrlf()
+    {
+        var ini = StartnetScript.BuildWinpeshlIni();
+        var lines = ini.TrimEnd('\r', '\n').Split("\r\n");
+
+        Assert.Equal("[LaunchApps]", lines[0]);
+        Assert.Equal(@"%SYSTEMROOT%\System32\cmd.exe, /c %SYSTEMROOT%\System32\startnet.cmd", lines[1]);   // 1o: wpeinit, Z:, startup
+        Assert.Equal(@"%SYSTEMROOT%\System32\WinPELauncher.exe", lines[2]);                               // 2o: o shell
+        Assert.Equal(@"%SYSTEMROOT%\System32\cmd.exe", lines[3]);                                         // 3o: só se o launcher terminar
+        Assert.Equal(4, lines.Length);
+        Assert.Equal(ini, Encoding.ASCII.GetString(StartnetScript.ToBytes(ini)));
+        Assert.EndsWith("\r\n", ini);
+    }
 
     // ---- opções ----
 
@@ -285,7 +307,7 @@ public sealed class LauncherTests : IDisposable
     private static readonly IProgress<BuildProgress> NoProgress = new Progress<BuildProgress>(_ => { });
 
     [Fact]
-    public async Task Build_WithLauncher_InstallsItAddsNetFxAndStartsFromStartnet()
+    public async Task Build_WithLauncher_InstallsItAddsNetFxAndMakesItTheShell()
     {
         var launcher = Path.Combine(_temp, "launcher", "WinPELauncher.exe");
         Touch(launcher);
@@ -298,7 +320,8 @@ public sealed class LauncherTests : IDisposable
 
         var system32 = Path.Combine(Work, "mount", "Windows", "System32");
         Assert.True(File.Exists(Path.Combine(system32, "WinPELauncher.exe")));
-        Assert.Contains("WinPELauncher.exe", await File.ReadAllTextAsync(Path.Combine(system32, "startnet.cmd")));
+        Assert.DoesNotContain("WinPELauncher", await File.ReadAllTextAsync(Path.Combine(system32, "startnet.cmd")));
+        Assert.Equal(StartnetScript.BuildWinpeshlIni(), await File.ReadAllTextAsync(Path.Combine(system32, "winpeshl.ini"))); // o launcher é o shell
 
         var added = runner.Commands.Where(c => c.Arguments.Contains("/Add-Package")).Select(c => c.Arguments).ToList();
         Assert.Contains(added, a => a.Contains("WinPE-WMI.cab"));
@@ -316,6 +339,7 @@ public sealed class LauncherTests : IDisposable
         await service.BuildAsync(Options([FakeProgram("HWiNFO")], null), NoProgress, _ => { }, CancellationToken.None);
 
         Assert.False(File.Exists(Path.Combine(Work, "mount", "Windows", "System32", "WinPELauncher.exe")));
+        Assert.False(File.Exists(Path.Combine(Work, "mount", "Windows", "System32", "winpeshl.ini"))); // sem launcher: shell padrão do WinPE
         Assert.DoesNotContain(runner.Commands, c => c.Arguments.Contains("/Add-Package"));
     }
 

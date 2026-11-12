@@ -2,7 +2,7 @@ using System.Text;
 
 namespace WinPEBuilder.Core.Build;
 
-/// <summary>Gera o startnet.cmd que o WinPE executa ao iniciar, para dar acesso aos arquivos do usuário.</summary>
+/// <summary>Gera o startnet.cmd (e, com launcher, o winpeshl.ini) que o WinPE executa ao iniciar.</summary>
 public static class StartnetScript
 {
     /// <summary>Nome da pasta de arquivos, na raiz da ISO ou em X:\.</summary>
@@ -17,24 +17,26 @@ public static class StartnetScript
     /// <summary>Nome do launcher dentro de X:\Windows\System32.</summary>
     public const string LauncherFileName = "WinPELauncher.exe";
 
+    /// <summary>Arquivo que troca o shell padrão do WinPE (um cmd.exe) pelo launcher.</summary>
+    public const string WinpeshlFileName = "winpeshl.ini";
+
     /// <summary>
     /// Texto do startnet.cmd. Só ASCII (o WinPE lê na página OEM), com CRLF.
     /// Define %ARQUIVOS% e a unidade <see cref="DriveLetter"/>:, e executa startup.cmd dela se existir.
     /// Se a letra já estiver em uso o subst falha em silêncio, mas %ARQUIVOS% continua correto.
     /// </summary>
+    /// <param name="mode">Onde estão os arquivos do usuário.</param>
+    /// <param name="launcher">
+    /// true = o launcher é o shell (iniciado pelo winpeshl.ini DEPOIS deste script): então o startup.cmd roda numa janela
+    /// própria, sem bloquear, para o desktop aparecer logo. false = o próprio cmd.exe do startnet é o shell (padrão do WinPE).
+    /// </param>
     public static string Build(FilesMode mode, bool launcher = false)
     {
         var lines = new List<string> { "@echo off", "wpeinit" };
-        var launcherLine = $"start \"\" \"%SystemRoot%\\System32\\{LauncherFileName}\"";
 
         switch (mode)
         {
             case FilesMode.None:
-                if (launcher)
-                {
-                    lines.Add(launcherLine);
-                }
-
                 break;
 
             case FilesMode.InsideImage:
@@ -43,7 +45,7 @@ public static class StartnetScript
                 lines.Add($"  set ARQUIVOS=X:\\{FilesFolderName}");
                 lines.Add($"  subst {DriveLetter}: X:\\{FilesFolderName} 2>nul");
                 lines.Add(")");
-                AddTail(lines, launcher ? launcherLine : null);
+                AddStartupHook(lines, launcher);
                 break;
 
             case FilesMode.OnIso:
@@ -56,7 +58,7 @@ public static class StartnetScript
                 lines.Add("  )");
                 lines.Add(")");
                 lines.Add(":arquivos_ok");
-                AddTail(lines, launcher ? launcherLine : null);
+                AddStartupHook(lines, launcher);
                 break;
 
             default:
@@ -66,16 +68,30 @@ public static class StartnetScript
         return string.Join("\r\n", lines) + "\r\n";
     }
 
-    /// <summary>Launcher primeiro (a área de trabalho aparece mesmo que o startup.cmd demore), depois o startup.cmd do usuário.</summary>
-    private static void AddTail(List<string> lines, string? launcherLine)
+    /// <summary>
+    /// Sem launcher o startup.cmd roda aqui mesmo (bloqueando, como sempre foi). Com launcher ele vai para uma janela própria
+    /// (<c>start</c>): senão o desktop só apareceria depois que o script do usuário terminasse.
+    /// </summary>
+    private static void AddStartupHook(List<string> lines, bool launcher)
     {
-        if (launcherLine is not null)
-        {
-            lines.Add(launcherLine);
-        }
-
-        lines.Add($"if exist {DriveLetter}:\\startup.cmd call {DriveLetter}:\\startup.cmd");
+        var startup = $"{DriveLetter}:\\startup.cmd";
+        lines.Add(launcher
+            ? $"if exist {startup} start \"startup.cmd\" cmd.exe /c call {startup}"
+            : $"if exist {startup} call {startup}");
     }
+
+    /// <summary>
+    /// winpeshl.ini que faz do launcher o shell do WinPE. O winpeshl executa os itens de [LaunchApps] em sequência, um depois do
+    /// outro: (1) o startnet.cmd (wpeinit, unidade Z:, startup.cmd) numa janela que fecha sozinha; (2) o launcher, que fica
+    /// aberto (é o shell — se ele terminar, o WinPE reinicia o PC); (3) um prompt de comando, que só aparece se o launcher
+    /// travar ou terminar, para nunca cair num loop de reinicialização. Só ASCII, com CRLF.
+    /// </summary>
+    public static string BuildWinpeshlIni() => string.Join(
+        "\r\n",
+        "[LaunchApps]",
+        @"%SYSTEMROOT%\System32\cmd.exe, /c %SYSTEMROOT%\System32\startnet.cmd",
+        $@"%SYSTEMROOT%\System32\{LauncherFileName}",
+        @"%SYSTEMROOT%\System32\cmd.exe") + "\r\n";
 
     public static byte[] ToBytes(string script) => Encoding.ASCII.GetBytes(script);
 }

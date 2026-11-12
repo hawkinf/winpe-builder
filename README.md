@@ -62,6 +62,8 @@ Os programas são copiados para `Arquivos\Programas\<id>` e descritos em `Arquiv
 categoria, Prompt de comando, PowerShell, Reiniciar e Desligar. Ele precisa do pacote **.NET Framework** do WinPE, que o app adiciona sozinho e
 que só existe com a origem **ADK**. Com a origem *boot.wim de ISO* os programas são copiados (unidade `Z:`), mas sem desktop/menu.
 
+**Shell do WinPE:** com o launcher, ele é o *shell* (via `winpeshl.ini`): não aparece prompt de comando na tela e fechar janelas não reinicia o PC. O Prompt de comando fica no menu Iniciar; se o launcher terminar, um prompt de reserva abre. Sem o launcher vale o padrão do WinPE: o prompt é o shell e **fechá-lo reinicia o computador**.
+
 Testar o launcher no Windows comum (janela normal; não desliga nada):
 
 ```powershell
