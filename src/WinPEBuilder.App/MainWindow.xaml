@@ -123,7 +123,8 @@
                                     <GridViewColumn Header="Nome" Width="120" DisplayMemberBinding="{Binding Name}"/>
                                     <GridViewColumn Header="Categoria" Width="90" DisplayMemberBinding="{Binding Category}"/>
                                     <GridViewColumn Header="Aparece em" Width="110" DisplayMemberBinding="{Binding Where}"/>
-                                    <GridViewColumn Header="Arquivo" Width="170" DisplayMemberBinding="{Binding File}"/>
+                                    <GridViewColumn Header="Arq." Width="62" DisplayMemberBinding="{Binding Arch}"/>
+                                    <GridViewColumn Header="Arquivo" Width="120" DisplayMemberBinding="{Binding File}"/>
                                 </GridView>
                             </ListView.View>
                         </ListView>

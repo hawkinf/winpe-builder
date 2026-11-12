@@ -59,6 +59,7 @@
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Header="Incluir" Binding="{Binding Include, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
                 <DataGridTextColumn Header="Programa (dentro da pasta)" Binding="{Binding RelativePath}" IsReadOnly="True" Width="*"/>
+                <DataGridTextColumn Header="Arq." Binding="{Binding Arch}" IsReadOnly="True" Width="70"/>
                 <DataGridTextColumn Header="Nome exibido" Binding="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="190"/>
                 <DataGridCheckBoxColumn Header="Menu Iniciar" Binding="{Binding StartMenu, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
                 <DataGridCheckBoxColumn Header="Área de trabalho" Binding="{Binding Desktop, UpdateSourceTrigger=PropertyChanged}" Width="110"/>

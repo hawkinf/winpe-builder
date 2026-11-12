@@ -212,6 +212,7 @@ public partial class MainWindow : Window
         }
 
         UpdateSourceState();
+        RefreshPrograms(ProgramsList.SelectedIndex);
     }
 
     private void UpdateSourceState()
@@ -247,7 +248,7 @@ public partial class MainWindow : Window
 
     // ---- programas (desktop / menu Iniciar) -----------------------------------------------------------
 
-    private sealed record ProgramRow(string Name, string Category, string Where, string File);
+    private sealed record ProgramRow(string Name, string Category, string Where, string Arch, string File);
 
     private static string DescribeWhere(ProgramEntry p)
     {
@@ -273,7 +274,7 @@ public partial class MainWindow : Window
     private void RefreshPrograms(int selectIndex = -1)
     {
         ProgramsList.ItemsSource = _programs
-            .Select(p => new ProgramRow(p.Name, p.Category, DescribeWhere(p),
+            .Select(p => new ProgramRow(p.Name, p.Category, DescribeWhere(p), ProgramCompatibility.Label(p, SelectedArchitecture),
                 File.Exists(p.SourceExe) ? p.SourceExe : "✖ não encontrado: " + p.SourceExe))
             .ToList();
         if (selectIndex >= 0 && selectIndex < _programs.Count)
@@ -307,6 +308,14 @@ public partial class MainWindow : Window
         {
             ProgramsHint.Text = "O launcher (desktop + menu Iniciar) é instalado automaticamente e o pacote .NET Framework é adicionado sozinho.";
             ProgramsHint.Foreground = System.Windows.Media.Brushes.DarkGreen;
+        }
+
+        var incompatible = ProgramCompatibility.Warnings(_programs, SelectedArchitecture);
+        if (incompatible.Count > 0)
+        {
+            ProgramsHint.Text += $"\n⚠ {incompatible.Count} programa(s) NÃO executam num WinPE de {SelectedArchitecture.ToDisplayName()} "
+                + "(programas de 32 bits não rodam no WinPE de 64 bits). Veja a coluna Arq.";
+            ProgramsHint.Foreground = System.Windows.Media.Brushes.DarkOrange;
         }
     }
 
@@ -351,7 +360,7 @@ public partial class MainWindow : Window
 
     private void ProgramAddButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ProgramWindow(null, _programs.Select(p => p.Category), _programs.Select(p => p.Id)) { Owner = this };
+        var dialog = new ProgramWindow(null, _programs.Select(p => p.Category), _programs.Select(p => p.Id), architecture: SelectedArchitecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is not null)
         {
             _programs.Add(dialog.Result);
@@ -367,7 +376,7 @@ public partial class MainWindow : Window
 
     private void DesignerButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new DesignerWindow(_programs, _layout, _menuOrder, _wallpaper) { Owner = this };
+        var dialog = new DesignerWindow(_programs, _layout, _menuOrder, _wallpaper, SelectedArchitecture) { Owner = this };
         dialog.ShowDialog();
         if (!dialog.Saved)
         {
@@ -383,7 +392,7 @@ public partial class MainWindow : Window
 
     private void ProgramAddFolderButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new FolderImportWindow(_programs.Select(p => p.Id)) { Owner = this };
+        var dialog = new FolderImportWindow(_programs.Select(p => p.Id), architecture: SelectedArchitecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Results.Count > 0)
         {
             _programs.AddRange(dialog.Results);
@@ -409,7 +418,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dialog = new ProgramWindow(_programs[index], _programs.Select(p => p.Category), _programs.Select(p => p.Id)) { Owner = this };
+        var dialog = new ProgramWindow(_programs[index], _programs.Select(p => p.Category), _programs.Select(p => p.Id), architecture: SelectedArchitecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is not null)
         {
             _programs[index] = dialog.Result;
@@ -605,6 +614,16 @@ public partial class MainWindow : Window
         }
 
         CollectSettings().TrySave(_settingsPath);
+
+        var incompatible = options.CompatibilityWarnings;
+        if (incompatible.Count > 0 &&
+            MessageBox.Show(this,
+                "Estes programas NÃO vão executar neste WinPE:\n\n" + string.Join("\n\n", incompatible.Select(w => "• " + w))
+                + "\n\nGerar a ISO mesmo assim?",
+                "Programas incompatíveis", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
 
         if (File.Exists(options.OutputIsoPath) &&
             MessageBox.Show(this, $"A ISO já existe e será substituída:\n{options.OutputIsoPath}\n\nContinuar?",

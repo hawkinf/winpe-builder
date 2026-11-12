@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using Microsoft.Win32;
+using WinPEBuilder.Core;
 using WinPEBuilder.Core.Programs;
 
 namespace WinPEBuilder.App;
@@ -13,13 +14,16 @@ public partial class ProgramWindow : Window
     private readonly IReadOnlyList<string> _otherIds;
     private bool _nameEditedByUser;
     private int _sizeVersion;
+    private readonly WinPeArchitecture _architecture;
 
     /// <summary>Preenchido quando o usuário confirma com OK.</summary>
     public ProgramEntry? Result { get; private set; }
 
-    public ProgramWindow(ProgramEntry? existing, IEnumerable<string> categories, IEnumerable<string> allIds, string? initialExe = null)
+    public ProgramWindow(ProgramEntry? existing, IEnumerable<string> categories, IEnumerable<string> allIds, string? initialExe = null,
+        WinPeArchitecture architecture = WinPeArchitecture.X64)
     {
         InitializeComponent();
+        _architecture = architecture;
         _existing = existing;
         _otherIds = [.. allIds.Where(id => !string.Equals(id, existing?.Id, StringComparison.OrdinalIgnoreCase))];
 
@@ -137,8 +141,20 @@ public partial class ProgramWindow : Window
 
         if (version == _sizeVersion)
         {
-            SizeText.Text = text;
+            SizeText.Text = text + ArchWarning(path);
         }
+    }
+
+    /// <summary>"\n⚠ ..." se o executável não roda neste WinPE (ex.: 32 bits no WinPE de 64 bits); vazio se está tudo certo.</summary>
+    private string ArchWarning(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return string.Empty;
+        }
+
+        var message = ProgramCompatibility.Check(new ProgramEntry { Name = "x", SourceExe = path }, _architecture);
+        return message is null ? string.Empty : "\n⚠ Este programa " + message;
     }
 
     private static string DescribeSize(string path, bool copyFolder, string root)
@@ -208,6 +224,13 @@ public partial class ProgramWindow : Window
         if (errors.Count > 0)
         {
             MessageBox.Show(this, string.Join(Environment.NewLine, errors), "WinPE Builder", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (ProgramCompatibility.Check(entry, _architecture) is { } incompatible &&
+            MessageBox.Show(this, "Este programa " + incompatible + "\n\nAdicionar mesmo assim?", "Programa incompatível",
+                MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
             return;
         }
 

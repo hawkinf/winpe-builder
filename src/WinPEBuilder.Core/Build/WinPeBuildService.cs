@@ -53,6 +53,11 @@ public sealed class WinPeBuildService(
             throw new BuildException($"A pasta de trabalho precisa ficar dentro de {allowedWorkRoot}.");
         }
 
+        foreach (var warning in options.CompatibilityWarnings)
+        {
+            log("Aviso: " + warning);
+        }
+
         CheckFilesFolder(options);
         var kit = ResolveKit(options);
         var run =new BuildRun(options, kit, new BuildLayout(Path.GetFullPath(options.WorkDirectory)), log, cancellationToken);

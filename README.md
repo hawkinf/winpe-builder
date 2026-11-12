@@ -101,6 +101,10 @@ Dados do app em `%LOCALAPPDATA%\WinPEBuilder` (`settings.json`, `logs\`, `downlo
 | `docs/` | `ARCHITECTURE.md` (mapa do código e armadilhas) e `STATUS.md` (estado, pendências, log) |
 | `scripts/`, `config/`, `tools/` | Utilitários e o antigo "WinPE Test Lab" (PhoenixPE/PEBakery; binários não são versionados) |
 
+## Programas de 32 bits x WinPE de 64 bits
+
+O WinPE de 64 bits **não executa programas de 32 bits** (não tem o WOW64 completo): eles falham com *"The application has failed to start because its side-by-side configuration is incorrect"*. Por isso o app lê o cabeçalho de cada `.exe`, mostra **⚠** no editor e na coluna *Arq.*, pergunta antes de gerar a ISO e, ao importar uma pasta, deixa **desmarcados** os programas incompatíveis. Soluções: use a versão de 64 bits do programa, ou gere um WinPE de 32 bits (que não executa programas de 64 bits).
+
 ## Testando numa máquina virtual
 
 A ISO foi testada no QEMU (BIOS e UEFI). Se ela **não inicia** na sua VM, quase sempre é a configuração da VM:

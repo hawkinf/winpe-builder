@@ -4,14 +4,15 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using Microsoft.Win32;
+using WinPEBuilder.Core;
 using WinPEBuilder.Core.Programs;
 
 namespace WinPEBuilder.App;
 
 /// <summary>Uma linha da grade: um executável encontrado dentro da pasta escolhida.</summary>
-public sealed class ExeRow(string fullPath, string relativePath, string name) : INotifyPropertyChanged
+public sealed class ExeRow(string fullPath, string relativePath, string name, string arch = "", bool include = true) : INotifyPropertyChanged
 {
-    private bool _include = true;
+    private bool _include = include;
     private bool _desktop;
     private bool _startMenu = true;
     private string _name = name;
@@ -19,6 +20,9 @@ public sealed class ExeRow(string fullPath, string relativePath, string name) : 
     public string FullPath { get; } = fullPath;
 
     public string RelativePath { get; } = relativePath;
+
+    /// <summary>"64 bits", "32 bits ⚠"… (vazio se não dá para saber).</summary>
+    public string Arch { get; } = arch;
 
     public string Name { get => _name; set => Set(ref _name, value); }
 
@@ -47,13 +51,15 @@ public partial class FolderImportWindow : Window
     private readonly IReadOnlyList<string> _existingIds;
     private string _root = string.Empty;
     private int _scanVersion;
+    private readonly WinPeArchitecture _architecture;
 
     /// <summary>Programas a adicionar (preenchido com OK).</summary>
     public IReadOnlyList<ProgramEntry> Results { get; private set; } = [];
 
-    public FolderImportWindow(IEnumerable<string> existingIds, string? initialFolder = null)
+    public FolderImportWindow(IEnumerable<string> existingIds, string? initialFolder = null, WinPeArchitecture architecture = WinPeArchitecture.X64)
     {
         InitializeComponent();
+        _architecture = architecture;
         _existingIds = [.. existingIds];
         Grid.ItemsSource = _rows;
         InfoText.Text = "Escolha uma pasta (ex.: a pasta de um programa portátil ou de um pacote de ferramentas).";
@@ -120,9 +126,15 @@ public partial class FolderImportWindow : Window
             FolderNameBox.Text = folderName;
         }
 
+        var skipped = 0;
         foreach (var file in scan.Files)
         {
-            _rows.Add(new ExeRow(file, Path.GetRelativePath(root, file), ProgramScanner.SuggestName(file)));
+            // programa que não executa neste WinPE (ex.: 32 bits no WinPE de 64 bits) vem desmarcado
+            var probe = new ProgramEntry { Name = "x", SourceExe = file };
+            var compatible = ProgramCompatibility.Check(probe, _architecture) is null;
+            skipped += compatible ? 0 : 1;
+            _rows.Add(new ExeRow(file, Path.GetRelativePath(root, file), ProgramScanner.SuggestName(file),
+                ProgramCompatibility.Label(probe, _architecture), include: compatible));
         }
 
         var mb = bytes / (1024.0 * 1024);
@@ -130,7 +142,8 @@ public partial class FolderImportWindow : Window
             ? "Nenhum .exe encontrado nessa pasta (procurei até 3 níveis de subpastas)."
             : $"{scan.Files.Count} programa(s) encontrado(s). A pasta inteira ({mb:0.#} MB) é copiada uma única vez."
               + (scan.Truncated ? " ⚠ Havia mais programas; só os primeiros foram listados." : string.Empty)
-              + (mb > 500 ? " ⚠ Grande: a ISO vai crescer bastante." : string.Empty);
+              + (mb > 500 ? " ⚠ Grande: a ISO vai crescer bastante." : string.Empty)
+              + (skipped > 0 ? $" ⚠ {skipped} programa(s) vieram DESMARCADOS: não executam num WinPE de {_architecture.ToDisplayName()}." : string.Empty);
     }
 
     private void ShowFolder_Changed(object sender, RoutedEventArgs e) =>

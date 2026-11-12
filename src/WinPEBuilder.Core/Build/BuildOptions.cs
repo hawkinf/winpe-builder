@@ -93,6 +93,11 @@ public sealed record BuildOptions
     /// <summary>Inicia direto, sem o "Pressione qualquer tecla para iniciar do CD" no UEFI.</summary>
     public bool BootWithoutPrompt { get; init; } = true;
 
+    /// <summary>
+    /// Programas que NÃO vão executar neste WinPE (ex.: 32 bits num WinPE de 64 bits). Só avisos — não impedem a geração.
+    /// </summary>
+    public IReadOnlyList<string> CompatibilityWarnings => ProgramCompatibility.Warnings(Programs, Architecture);
+
     /// <summary>Valida as opções; devolve mensagens amigáveis (lista vazia = ok).</summary>
     public IReadOnlyList<string> Validate()
     {

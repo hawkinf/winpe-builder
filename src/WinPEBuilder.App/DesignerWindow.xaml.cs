@@ -6,6 +6,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using WinPEBuilder.Core;
 using WinPEBuilder.Core.Programs;
 
 namespace WinPEBuilder.App;
@@ -24,6 +25,7 @@ public partial class DesignerWindow : Window
     private sealed record ListRow(string Id, string Name, string Detail);
 
     private readonly DesignerModel _model;
+    private readonly WinPeArchitecture _architecture;
     private readonly Dictionary<string, Border> _desktopIcons = new();
     private readonly Dictionary<string, Border> _folderIcons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Border _highlight;
@@ -64,9 +66,10 @@ public partial class DesignerWindow : Window
     public WallpaperSettings Wallpaper => _model.Wallpaper;
 
     public DesignerWindow(IEnumerable<ProgramEntry> programs, IReadOnlyDictionary<string, DesktopSlot>? layout, IEnumerable<string>? menuOrder = null,
-        WallpaperSettings? wallpaper = null)
+        WallpaperSettings? wallpaper = null, WinPeArchitecture architecture = WinPeArchitecture.X64)
     {
         InitializeComponent();
+        _architecture = architecture;
         _model = new DesignerModel(programs, layout, menuOrder, wallpaper);
         _highlight = new Border
         {
@@ -138,10 +141,23 @@ public partial class DesignerWindow : Window
         DirtyText.Text = _model.Dirty ? "● Não gravado" : string.Empty;
     }
 
-    private static Border BuildIconVisual(ImageSource image, string label, string tooltip)
+    private static Border BuildIconVisual(ImageSource image, string label, string tooltip, bool warn = false)
     {
         var panel = new StackPanel { Width = Cell - 4 };
-        panel.Children.Add(new Image { Source = image, Width = 32, Height = 32, Margin = new Thickness(0, 6, 0, 3) });
+        var imageHost = new Grid { Width = 32, Height = 32, Margin = new Thickness(0, 6, 0, 3) };
+        imageHost.Children.Add(new Image { Source = image, Width = 32, Height = 32 });
+        if (warn)
+        {
+            // sinal de que o programa NÃO executa neste WinPE (ex.: 32 bits no WinPE de 64 bits)
+            imageHost.Children.Add(new TextBlock
+            {
+                Text = "⚠", FontSize = 16, FontWeight = FontWeights.Bold, Foreground = Brushes.Orange,
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, -6, -6),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Colors.Black, BlurRadius = 2, ShadowDepth = 1, Opacity = 0.9 },
+            });
+        }
+
+        panel.Children.Add(imageHost);
         panel.Children.Add(new TextBlock
         {
             Text = label,
@@ -167,11 +183,16 @@ public partial class DesignerWindow : Window
 
     private static ImageSource IconFor(ProgramEntry program) => ShellIcon.Get(program.SourceExe);
 
+    private bool Incompatible(ProgramEntry program) => ProgramCompatibility.Check(program, _architecture) is not null;
+
+    private string ProgramTooltip(ProgramEntry program) =>
+        ProgramCompatibility.Check(program, _architecture) is { } message ? program.SourceExe + "\n⚠ Este programa " + message : program.SourceExe;
+
     private Border BuildDesktopIcon(DesktopItem item)
     {
         var icon = item.IsFolder
             ? BuildIconVisual(ShellIcon.Folder, item.Label, $"{item.Members.Count} programa(s) — duplo clique abre")
-            : BuildIconVisual(IconFor(item.Program!), item.Label, item.Program!.SourceExe);
+            : BuildIconVisual(IconFor(item.Program!), item.Label, ProgramTooltip(item.Program!), Incompatible(item.Program!));
         icon.Tag = item.Key;
         icon.MouseLeftButtonDown += Icon_MouseLeftButtonDown;
         icon.MouseMove += Icon_MouseMove;
@@ -207,7 +228,7 @@ public partial class DesignerWindow : Window
     {
         var rows = _model.Programs
             .OrderBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(p => new ListRow(p.Id, p.Name, Describe(p)))
+            .Select(p => new ListRow(p.Id, p.Name, DescribeWithArch(p)))
             .ToList();
         _suppressListEvents = true;
         ProgramList.ItemsSource = rows;
@@ -235,6 +256,9 @@ public partial class DesignerWindow : Window
 
         return $"{string.Join(" · ", places)}   |   {p.Category}";
     }
+
+    private string DescribeWithArch(ProgramEntry p) =>
+        ProgramCompatibility.Check(p, _architecture) is null ? Describe(p) : "⚠ " + ProgramCompatibility.Label(p, _architecture).Replace(" ⚠", string.Empty) + " — não executa neste WinPE   |   " + Describe(p);
 
     // ==== janela de pasta ========================================================================================
 
@@ -264,7 +288,7 @@ public partial class DesignerWindow : Window
 
         foreach (var member in view.Programs)
         {
-            var icon = BuildIconVisual(IconFor(member), member.Name, member.SourceExe);
+            var icon = BuildIconVisual(IconFor(member), member.Name, ProgramTooltip(member), Incompatible(member));
             // dentro da janela branca o texto precisa ser escuro
             ((TextBlock)((StackPanel)icon.Child).Children[1]).Foreground = Brushes.Black;
             icon.Tag = member.Id;
@@ -686,7 +710,7 @@ public partial class DesignerWindow : Window
             IReadOnlyList<ProgramEntry> results = [];
             if (Directory.Exists(path))
             {
-                var dialog = new FolderImportWindow(_model.Ids, path) { Owner = this };
+                var dialog = new FolderImportWindow(_model.Ids, path, _architecture) { Owner = this };
                 if (dialog.ShowDialog() == true)
                 {
                     results = dialog.Results;
@@ -694,7 +718,7 @@ public partial class DesignerWindow : Window
             }
             else if (File.Exists(path) && ProgramExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase))
             {
-                var dialog = new ProgramWindow(null, _model.Categories, _model.Ids, path) { Owner = this };
+                var dialog = new ProgramWindow(null, _model.Categories, _model.Ids, path, _architecture) { Owner = this };
                 if (dialog.ShowDialog() == true && dialog.Result is not null)
                 {
                     results = [dialog.Result];
@@ -712,7 +736,7 @@ public partial class DesignerWindow : Window
 
     private void AddProgram_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new ProgramWindow(null, _model.Categories, _model.Ids) { Owner = this };
+        var dialog = new ProgramWindow(null, _model.Categories, _model.Ids, architecture: _architecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is not null)
         {
             _model.Add([dialog.Result]);
@@ -722,7 +746,7 @@ public partial class DesignerWindow : Window
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new FolderImportWindow(_model.Ids) { Owner = this };
+        var dialog = new FolderImportWindow(_model.Ids, architecture: _architecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Results.Count > 0)
         {
             _model.Add(dialog.Results);
@@ -763,7 +787,7 @@ public partial class DesignerWindow : Window
             return;
         }
 
-        var dialog = new ProgramWindow(program, _model.Categories, _model.Ids) { Owner = this };
+        var dialog = new ProgramWindow(program, _model.Categories, _model.Ids, architecture: _architecture) { Owner = this };
         if (dialog.ShowDialog() == true && dialog.Result is not null)
         {
             _model.Replace(dialog.Result);
@@ -1099,7 +1123,7 @@ public partial class DesignerWindow : Window
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal };
                 row.Children.Add(new Image { Source = IconFor(program), Width = 16, Height = 16, Margin = new Thickness(0, 0, 6, 0) });
-                row.Children.Add(new TextBlock { Text = program.Name });
+                row.Children.Add(new TextBlock { Text = Incompatible(program) ? program.Name + "  ⚠" : program.Name, ToolTip = ProgramTooltip(program) });
                 category.Items.Add(new TreeViewItem { Header = row, Tag = DesktopLayoutHelper.ProgramKey(program) });
             }
 

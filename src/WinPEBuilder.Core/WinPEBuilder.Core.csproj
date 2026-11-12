@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Leitor de cabecalho PE compartilhado com o launcher (mesmo codigo, mesma resposta). -->
+    <Compile Include="..\WinPEBuilder.Launcher\Model\PeInfo.cs" Link="Shared\PeInfo.cs" />
+  </ItemGroup>
+
 </Project>
