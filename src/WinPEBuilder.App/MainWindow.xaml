@@ -34,6 +34,19 @@
             <StackPanel Margin="0,0,8,0">
               <StackPanel x:Name="ConfigPanel">
 
+                <GroupBox Header="Configuração">
+                    <StackPanel>
+                        <WrapPanel>
+                            <Button x:Name="ConfigOpenButton" Content="Abrir configuração…" Click="ConfigOpenButton_Click"
+                                    ToolTip="Carrega tudo (arquitetura, pacotes, programas, editor visual, papel de parede…) de um arquivo .winpe.json"/>
+                            <Button x:Name="ConfigSaveButton" Content="Salvar configuração como…" Click="ConfigSaveButton_Click"
+                                    ToolTip="Grava tudo o que está na tela num arquivo .winpe.json (para ter várias configurações ou levar para outro PC)"/>
+                        </WrapPanel>
+                        <TextBlock x:Name="ConfigText" TextWrapping="Wrap" Foreground="Gray"
+                                   Text="A tela é lembrada ao fechar o programa. Use os botões para guardar várias configurações ou levar para outro PC."/>
+                    </StackPanel>
+                </GroupBox>
+
                 <GroupBox Header="1. Requisitos (Windows ADK)">
                     <StackPanel>
                         <TextBlock x:Name="DeploymentToolsText" Margin="0,2"/>

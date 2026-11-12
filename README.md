@@ -21,6 +21,10 @@ arquivos e programas dentro. Ele baixa e instala sozinho o que for preciso (Wind
 - **Editor visual** com *preview* fiel, sem executar nada: arrastar, adicionar, remover, **gravar ou descartar**.
 - Pastas e **subpastas** na área de trabalho, **ordem manual** do menu Iniciar e **papel de parede** (imagem ou cor).
 
+## Gravar e carregar configurações
+
+Tudo o que você monta (arquitetura, origem, pacotes, teclado, pasta de arquivos, programas, posições do editor visual, ordem do menu Iniciar e papel de parede) é lembrado ao fechar o programa. Para guardar **várias configurações** ou levar para outro PC, use **Salvar configuração como…** e **Abrir configuração…** (no topo da janela): são arquivos `.winpe.json`. Um arquivo inválido nunca apaga a tela atual, e ao abrir uma configuração gravada em outro computador o app lista os caminhos (programas, imagem do papel de parede…) que não existem neste PC. Os caminhos são absolutos.
+
 ## Editor visual
 
 No grupo **Programas no WinPE**, clique em **Abrir editor visual…**.

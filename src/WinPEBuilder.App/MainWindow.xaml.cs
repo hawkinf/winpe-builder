@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private List<string> _menuOrder = [];
     private WallpaperSettings _wallpaper = new();
     private int _summaryVersion;
+    private string? _currentConfigPath;
     private CancellationTokenSource? _cts;
     private LogFile? _logFile;
     private AdkStatus _status = new(null, null, null);
@@ -179,6 +180,82 @@ public partial class MainWindow : Window
         }
 
         return options;
+    }
+
+    // ---- gravar / carregar configuração --------------------------------------------------------------------
+
+    private static string ConfigFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WinPEBuilder");
+
+    private void ConfigSaveButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Salvar a configuração",
+            Filter = "Configuração do WinPE Builder (*.winpe.json)|*.winpe.json",
+            DefaultExt = UserSettings.ConfigFileExtension,
+            AddExtension = true,
+            FileName = _currentConfigPath is null ? $"WinPE_{SelectedArchitecture.ToAdkName()}" : Path.GetFileName(_currentConfigPath),
+            InitialDirectory = Directory.Exists(ConfigFolder) ? ConfigFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        if (!CollectSettings().TrySave(dialog.FileName, out var error))
+        {
+            ShowError(error ?? "Não foi possível gravar a configuração.");
+            return;
+        }
+
+        _currentConfigPath = dialog.FileName;
+        ConfigText.Text = $"Configuração gravada em: {dialog.FileName}";
+        StatusText.Text = "Configuração gravada.";
+    }
+
+    private void ConfigOpenButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Abrir uma configuração",
+            Filter = "Configuração do WinPE Builder (*.winpe.json;*.json)|*.winpe.json;*.json|Todos os arquivos (*.*)|*.*",
+            InitialDirectory = Directory.Exists(ConfigFolder) ? ConfigFolder : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        // Valida ANTES de mexer na tela: arquivo inválido nunca apaga o que o usuário já configurou.
+        if (!UserSettings.TryRead(dialog.FileName, out var settings, out var error))
+        {
+            ShowError(error ?? "Não foi possível abrir a configuração.");
+            return;
+        }
+
+        if (MessageBox.Show(this, "Carregar esta configuração substitui tudo o que está na tela agora. Continuar?\n\n" + dialog.FileName,
+                "Abrir configuração", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        ApplySettings(settings);
+        UpdateSourceState();
+        _currentConfigPath = dialog.FileName;
+        ConfigText.Text = $"Configuração carregada de: {dialog.FileName}";
+        StatusText.Text = "Configuração carregada.";
+
+        var missing = settings.FindMissingFiles();
+        if (missing.Count > 0)
+        {
+            var shown = string.Join(Environment.NewLine, missing.Take(8).Select(m => "• " + m));
+            var more = missing.Count > 8 ? $"{Environment.NewLine}… e mais {missing.Count - 8}." : string.Empty;
+            MessageBox.Show(this,
+                $"A configuração foi carregada, mas {missing.Count} arquivo(s) citado(s) não existem neste PC (normal se ela foi gravada em outro computador):"
+                + Environment.NewLine + Environment.NewLine + shown + more
+                + Environment.NewLine + Environment.NewLine + "Corrija os caminhos antes de gerar a ISO (o app avisará de novo).",
+                "Arquivos não encontrados", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     // ---- requisitos -------------------------------------------------------------------------------------
