@@ -112,28 +112,108 @@ namespace WinPEBuilder.Launcher
             MessageBox.Show(message, "WinPE Launcher", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
-        /// <summary>Ícone do executável (o mesmo do Explorer); cai no ícone padrão se não der.</summary>
+        /// <summary>
+        /// Ícone do executável. 1) lê os recursos do próprio .exe (funciona no WinPE, que não tem as APIs de ícone do shell);
+        /// 2) se não houver (ex.: .cmd/.bat), pergunta ao Windows; 3) cai no ícone padrão. Quem chama é dono do Bitmap devolvido.
+        /// </summary>
         public static Bitmap LoadIcon(string exePath, int size)
         {
-            try
+            if (exePath != null && File.Exists(exePath))
             {
-                if (exePath != null && File.Exists(exePath))
+                var fromResources = IconFromResources(exePath, size);
+                if (fromResources != null)
+                {
+                    return fromResources;
+                }
+
+                try
                 {
                     using (var icon = Icon.ExtractAssociatedIcon(exePath))
                     {
                         if (icon != null)
                         {
-                            return new Bitmap(icon.ToBitmap(), new Size(size, size));
+                            return Resized(icon.ToBitmap(), size);
                         }
                     }
                 }
-            }
-            catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is Win32Exception || ex is UnauthorizedAccessException)
-            {
-                AppLog.Write("Sem ícone para " + exePath + ": " + ex.Message);
+                catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is Win32Exception || ex is UnauthorizedAccessException)
+                {
+                    AppLog.Write("Sem ícone do shell para " + exePath + ": " + ex.Message);
+                }
             }
 
-            return new Bitmap(SystemIcons.Application.ToBitmap(), new Size(size, size));
+            return Resized(SystemIcons.Application.ToBitmap(), size);
+        }
+
+        private static Bitmap IconFromResources(string exePath, int size)
+        {
+            try
+            {
+                var ico = PeIconReader.ReadIcoFile(exePath);
+                var image = PeIconReader.Pick(PeIconReader.ParseIco(ico), size);
+                if (image == null)
+                {
+                    return null;
+                }
+
+                if (image.IsPng)
+                {
+                    using (var stream = new MemoryStream(image.Data))
+                    using (var png = new Bitmap(stream))
+                    {
+                        return Resized(png, size);
+                    }
+                }
+
+                // imagem em formato DIB: o Windows converte um .ico de uma imagem só
+                using (var single = new MemoryStream(SingleImageIco(image)))
+                using (var icon = new Icon(single))
+                {
+                    return Resized(icon.ToBitmap(), size);
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is OutOfMemoryException || ex is InvalidOperationException)
+            {
+                // GDI+ lança OutOfMemoryException para dados que não são imagem
+                AppLog.Write("Ícone dos recursos ilegível em " + exePath + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        private static byte[] SingleImageIco(PeIconReader.IconImage image)
+        {
+            using (var ms = new MemoryStream())
+            using (var w = new BinaryWriter(ms))
+            {
+                w.Write((ushort)0);
+                w.Write((ushort)1);
+                w.Write((ushort)1);
+                w.Write((byte)(image.Width >= 256 ? 0 : image.Width));
+                w.Write((byte)(image.Height >= 256 ? 0 : image.Height));
+                w.Write((byte)0);
+                w.Write((byte)0);
+                w.Write((ushort)1);
+                w.Write((ushort)image.BitCount);
+                w.Write((uint)image.Data.Length);
+                w.Write((uint)22);
+                w.Write(image.Data);
+                return ms.ToArray();
+            }
+        }
+
+        /// <summary>Redimensiona com boa qualidade para <paramref name="size"/> x <paramref name="size"/> mantendo a transparência.</summary>
+        private static Bitmap Resized(Image source, int size)
+        {
+            var result = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(result))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.DrawImage(source, new Rectangle(0, 0, size, size));
+            }
+
+            return result;
         }
     }
 }

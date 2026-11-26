@@ -75,7 +75,16 @@ namespace WinPEBuilder.Launcher
             }
 
             var runner = new ProgramRunner(filesRoot ?? string.Empty);
-            using (var desktop = new DesktopForm(runner, programs, layout, menuOrder, wallpaper, preview, notice))
+
+            // No WinPE o launcher é o shell: ele mesmo mapeia Z:, roda o wpeinit em segundo plano e depois o startup.cmd.
+            WinPeInit init = null;
+            if (!preview && WinPeInit.IsWinPE())
+            {
+                init = new WinPeInit(filesRoot, runner);
+                init.Start();
+            }
+
+            using (var desktop = new DesktopForm(runner, programs, layout, menuOrder, wallpaper, preview, notice, init == null ? null : (Func<string>)init.Poll))
             {
                 Application.Run(desktop);
             }

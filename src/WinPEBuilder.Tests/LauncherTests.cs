@@ -212,16 +212,16 @@ public sealed class LauncherTests : IDisposable
         Assert.Equal("@echo off\r\nwpeinit\r\n", StartnetScript.Build(FilesMode.None, launcher: true));
 
     [Fact]
-    public void Winpeshl_RunsStartnetThenLauncherThenFallbackPrompt_AsciiCrlf()
+    public void Winpeshl_LauncherIsTheShell_FallbackPromptOnlyIfItEnds_AsciiCrlf()
     {
         var ini = StartnetScript.BuildWinpeshlIni();
         var lines = ini.TrimEnd('\r', '\n').Split("\r\n");
 
         Assert.Equal("[LaunchApps]", lines[0]);
-        Assert.Equal(@"%SYSTEMROOT%\System32\cmd.exe, /c %SYSTEMROOT%\System32\startnet.cmd", lines[1]);   // 1o: wpeinit, Z:, startup
-        Assert.Equal(@"%SYSTEMROOT%\System32\WinPELauncher.exe", lines[2]);                               // 2o: o shell
-        Assert.Equal(@"%SYSTEMROOT%\System32\cmd.exe", lines[3]);                                         // 3o: só se o launcher terminar
-        Assert.Equal(4, lines.Length);
+        Assert.Equal(@"%SYSTEMROOT%\System32\WinPELauncher.exe", lines[1]);   // 1o: o shell (inicializa o WinPE sozinho)
+        Assert.Equal(@"%SYSTEMROOT%\System32\cmd.exe", lines[2]);              // 2o: so aparece se o launcher terminar
+        Assert.Equal(3, lines.Length);
+        Assert.DoesNotContain("startnet", ini);                                  // sem prompt/startnet no caminho normal
         Assert.Equal(ini, Encoding.ASCII.GetString(StartnetScript.ToBytes(ini)));
         Assert.EndsWith("\r\n", ini);
     }

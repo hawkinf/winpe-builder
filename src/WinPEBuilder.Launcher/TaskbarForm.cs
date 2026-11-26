@@ -24,13 +24,16 @@ namespace WinPEBuilder.Launcher
         private readonly Button _startButton;
         private readonly FlowLayoutPanel _tasksPanel;
         private readonly Label _clock;
+        private readonly Label _status;
+        private readonly Func<string> _statusProvider;
         private readonly Timer _timer;
         private readonly ContextMenuStrip _menu;
         private readonly List<KeyValuePair<Process, Button>> _tasks = new List<KeyValuePair<Process, Button>>();
 
-        public TaskbarForm(ProgramRunner runner, List<ProgramItem> programs, List<string> menuOrder, bool preview)
+        public TaskbarForm(ProgramRunner runner, List<ProgramItem> programs, List<string> menuOrder, bool preview, Func<string> statusProvider = null)
         {
             _runner = runner;
+            _statusProvider = statusProvider;
             _programs = programs;
             _menuOrder = menuOrder;
             _preview = preview;
@@ -60,6 +63,17 @@ namespace WinPEBuilder.Launcher
                 BackColor = BarColor,
             };
 
+            _status = new Label
+            {
+                Dock = DockStyle.Left,
+                Width = 0,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = Color.FromArgb(255, 196, 64),
+                BackColor = BarColor,
+                Padding = new Padding(12, 0, 0, 0),
+                Visible = false,
+            };
+
             _startButton = new Button
             {
                 Dock = DockStyle.Left,
@@ -77,6 +91,7 @@ namespace WinPEBuilder.Launcher
             // Ordem do designer: o controle Fill entra primeiro.
             Controls.Add(_tasksPanel);
             Controls.Add(_clock);
+            Controls.Add(_status);
             Controls.Add(_startButton);
 
             _menu = new ContextMenuStrip { Font = Font, ShowImageMargin = true };
@@ -134,6 +149,27 @@ namespace WinPEBuilder.Launcher
             _tasksPanel.Controls.Add(button);
         }
 
+        /// <summary>Mostra (ou esconde) o texto de andamento da inicialização do WinPE ao lado do botão Iniciar.</summary>
+        private void UpdateStatus()
+        {
+            if (_statusProvider == null)
+            {
+                return;
+            }
+
+            var text = _statusProvider();
+            if (string.IsNullOrEmpty(text))
+            {
+                _status.Visible = false;
+                _status.Width = 0;
+                return;
+            }
+
+            _status.Text = text;
+            _status.Width = TextRenderer.MeasureText(text, _status.Font).Width + 24;
+            _status.Visible = true;
+        }
+
         private static string Shorten(string text)
         {
             if (string.IsNullOrEmpty(text))
@@ -147,6 +183,7 @@ namespace WinPEBuilder.Launcher
         private void Tick()
         {
             _clock.Text = DateTime.Now.ToString("HH:mm");
+            UpdateStatus();
 
             for (var i = _tasks.Count - 1; i >= 0; i--)
             {

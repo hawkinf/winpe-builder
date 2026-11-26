@@ -28,12 +28,12 @@ namespace WinPEBuilder.Launcher
         private Rectangle _originalWorkArea;
 
         public DesktopForm(ProgramRunner runner, List<ProgramItem> programs, List<LayoutEntry> layout, List<string> menuOrder,
-            WallpaperInfo wallpaper, bool preview, string notice)
+            WallpaperInfo wallpaper, bool preview, string notice, Func<string> statusProvider = null)
         {
             _preview = preview;
             _runner = runner;
             _layout = layout;
-            _taskbar = new TaskbarForm(runner, programs, menuOrder, preview);
+            _taskbar = new TaskbarForm(runner, programs, menuOrder, preview, statusProvider);
 
             _color = WallpaperGeometry.ParseColor(wallpaper == null ? null : wallpaper.Color);
             _wallpaperMode = WallpaperGeometry.NormalizeMode(wallpaper == null ? null : wallpaper.Mode);

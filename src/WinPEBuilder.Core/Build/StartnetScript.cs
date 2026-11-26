@@ -81,15 +81,15 @@ public static class StartnetScript
     }
 
     /// <summary>
-    /// winpeshl.ini que faz do launcher o shell do WinPE. O winpeshl executa os itens de [LaunchApps] em sequência, um depois do
-    /// outro: (1) o startnet.cmd (wpeinit, unidade Z:, startup.cmd) numa janela que fecha sozinha; (2) o launcher, que fica
-    /// aberto (é o shell — se ele terminar, o WinPE reinicia o PC); (3) um prompt de comando, que só aparece se o launcher
-    /// travar ou terminar, para nunca cair num loop de reinicialização. Só ASCII, com CRLF.
+    /// winpeshl.ini que faz do launcher o shell do WinPE. O winpeshl executa os itens de [LaunchApps] em sequência, esperando cada
+    /// um terminar: (1) o launcher, que fica aberto (é o shell — se ele terminar, o WinPE reinicia o PC) e cuida sozinho da
+    /// inicialização (mapeia Z:, roda o wpeinit em SEGUNDO PLANO e depois o startup.cmd), então o desktop aparece na hora, sem
+    /// prompt na tela; (2) um prompt de comando, que só aparece se o launcher travar ou terminar, para nunca cair num loop de
+    /// reinicialização. O startnet.cmd não roda neste modo (só existe para quem abrir o prompt de reserva). Só ASCII, com CRLF.
     /// </summary>
     public static string BuildWinpeshlIni() => string.Join(
         "\r\n",
         "[LaunchApps]",
-        @"%SYSTEMROOT%\System32\cmd.exe, /c %SYSTEMROOT%\System32\startnet.cmd",
         $@"%SYSTEMROOT%\System32\{LauncherFileName}",
         @"%SYSTEMROOT%\System32\cmd.exe") + "\r\n";
 
