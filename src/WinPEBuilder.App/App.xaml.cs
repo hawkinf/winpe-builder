@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Security.Principal;
 using System.Windows;
 
@@ -66,8 +65,9 @@ public partial class App : Application
             // Aberto pelo "dotnet WinPEBuilder.dll": o processo é o dotnet.exe e o programa vai como primeiro argumento.
             if (string.Equals(Path.GetFileNameWithoutExtension(exe), "dotnet", StringComparison.OrdinalIgnoreCase))
             {
-                var dll = Assembly.GetEntryAssembly()?.Location;
-                if (string.IsNullOrEmpty(dll))
+                // Assembly.Location é vazio em single-file (erro IL3000); o primeiro argumento da linha de comando é a dll.
+                var dll = Environment.GetCommandLineArgs().FirstOrDefault();
+                if (string.IsNullOrEmpty(dll) || !dll.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || !File.Exists(dll))
                 {
                     return false;
                 }
